@@ -17,7 +17,7 @@ beforeAll(async () => {
   impact = await import("./[id]/impact/route");
 }, 60000);
 beforeEach(() => clearTables(db));
-afterAll(() => db.$disconnect());
+afterAll(() => db?.$disconnect());
 
 describe("merchants", () => {
   it("creates and gets", async () => {

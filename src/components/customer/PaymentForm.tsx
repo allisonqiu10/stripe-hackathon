@@ -14,16 +14,21 @@ function InnerForm({ returnUrl, payLabel }: { returnUrl: string; payLabel: strin
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!stripe || !elements) return;
+    if (!stripe || !elements || busy) return;
     setBusy(true);
     setError(null);
-    const { error: err } = await stripe.confirmPayment({
-      elements,
-      confirmParams: { return_url: returnUrl },
-    });
-    // Only reached on immediate error; success redirects to return_url.
-    if (err) setError(err.message ?? "Payment failed. Please try again.");
-    setBusy(false);
+    try {
+      const { error: err } = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: returnUrl },
+      });
+      // Success redirects to return_url; immediate errors stay on the form.
+      if (err) setError(err.message ?? "Payment failed. Please try again.");
+    } catch {
+      setError("Could not confirm payment. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

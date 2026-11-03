@@ -58,7 +58,7 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
   }, [merchantId, merchantReady, subtotal, effectiveRoundUp]);
 
   async function startPayment() {
-    if (!subtotal) return;
+    if (!subtotal || creating) return;
     // Reuse the existing PaymentIntent if the order is unchanged (avoids orphaned intents).
     if (intent && intent.quote.itemAmountCents === subtotal && intent.quote.roundUp === effectiveRoundUp) {
       setEditing(false);
@@ -135,7 +135,7 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
               type="checkbox"
               className="h-5 w-5"
               checked={roundUp}
-              disabled={locked}
+              disabled={locked || creating}
               onChange={(e) => setRoundUp(e.target.checked)}
             />
             <span className="text-sm">Round up to donate to {causeTitle}</span>

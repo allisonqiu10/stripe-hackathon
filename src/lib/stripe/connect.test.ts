@@ -1,6 +1,6 @@
 // OWNER: P1
 import { execSync } from 'node:child_process';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => {
   const os = require('node:os'), fs = require('node:fs'), path = require('node:path');
@@ -25,6 +25,7 @@ const get = (qs: string) => new Request(`http://x/api?${qs}`);
 const ev = (acct: unknown) => ({ type: 'account.updated', data: { object: acct } }) as never;
 
 beforeAll(() => { execSync('npx prisma migrate deploy', { env: process.env, stdio: 'pipe' }); });
+afterAll(() => db.$disconnect());
 beforeEach(async () => {
   vi.resetAllMocks();
   await db.cause.deleteMany(); await db.merchant.deleteMany();
@@ -69,6 +70,14 @@ describe('account.updated handler', () => {
     await handleAccountUpdated(ev(done('acct_c')));
     expect((await db.cause.findUniqueOrThrow({ where: { id: 'c1' } })).status).toBe('CLOSED');
   });
+  it('revokes readiness when a previously onboarded account loses transfers', async () => {
+    await db.merchant.update({ where: { id: 'm1' }, data: { stripeAccountId: 'acct_m', onboardingComplete: true } });
+    await db.cause.update({ where: { id: 'c1' }, data: { stripeAccountId: 'acct_c', onboardingComplete: true, status: 'ACTIVE' } });
+    await handleAccountUpdated(ev({ ...done('acct_m'), capabilities: { transfers: 'inactive' } }));
+    await handleAccountUpdated(ev({ ...done('acct_c'), requirements: { currently_due: ['a'], past_due: [] } }));
+    expect((await db.merchant.findUniqueOrThrow({ where: { id: 'm1' } })).onboardingComplete).toBe(false);
+    expect(await db.cause.findUniqueOrThrow({ where: { id: 'c1' } })).toMatchObject({ onboardingComplete: false, status: 'ACTIVE' });
+  });
   it('does nothing while requirements outstanding', async () => {
     await db.cause.update({ where: { id: 'c1' }, data: { stripeAccountId: 'acct_c' } });
     await handleAccountUpdated(ev({ ...done('acct_c'), requirements: { currently_due: ['a'], past_due: [] } }));
@@ -107,6 +116,9 @@ describe('routes', () => {
     m.retrieve.mockResolvedValue(done('acct_c'));
     expect(await (await status(get('kind=cause&id=c1'), ctx)).json()).toEqual({ onboardingComplete: true, requirementsDue: [] });
     expect(await db.cause.findUniqueOrThrow({ where: { id: 'c1' } })).toMatchObject({ onboardingComplete: true, status: 'ACTIVE' });
+    m.retrieve.mockResolvedValue({ ...done('acct_c'), capabilities: { transfers: 'inactive' } });
+    expect(await (await status(get('kind=cause&id=c1'), ctx)).json()).toMatchObject({ onboardingComplete: false });
+    expect((await db.cause.findUniqueOrThrow({ where: { id: 'c1' } })).onboardingComplete).toBe(false);
     expect((await status(get('kind=x&id=c1'), ctx)).status).toBe(400);
     expect((await status(get('kind=merchant&id=zzz'), ctx)).status).toBe(404);
   });

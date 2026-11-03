@@ -1,24 +1,23 @@
 // OWNER: P3
-// Single seam for types + transport. After P1 merges, change the import below to
-// "@/lib/contract" and set USE_MOCKS to false; nothing else should need to change.
+// Shared contract for both real API responses and mock fixtures.
 import { z } from "zod";
 import {
   CauseSchema,
-  ConnectStatusSchema,
-  ImpactSchema,
+  ConnectStatusResponseSchema as ConnectStatusSchema,
+  MerchantImpactResponseSchema as ImpactSchema,
   MerchantSchema,
   OnboardResponseSchema,
-  ProgressSchema,
-} from "@/mocks/p3/contract";
+  CauseProgressResponseSchema as ProgressSchema,
+} from "@/lib/contract";
 import type {
   Cause,
-  ConnectStatus,
-  Impact,
+  ConnectStatusResponse as ConnectStatus,
+  MerchantImpactResponse as Impact,
   Merchant,
-  MerchantPatch,
-  Progress,
+  UpdateMerchantRequest as MerchantPatch,
+  CauseProgressResponse as Progress,
   RuleType,
-} from "@/mocks/p3/contract";
+} from "@/lib/contract";
 import { mockApi } from "@/mocks/p3/api";
 
 export type { Cause, ConnectStatus, Impact, Merchant, MerchantPatch, Progress, RuleType };

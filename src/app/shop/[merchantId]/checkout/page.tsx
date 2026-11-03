@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic";
 
 export default async function CheckoutPage({ params }: { params: Promise<{ merchantId: string }> }) {
   const { merchantId } = await params;
-  return <CheckoutClient merchantId={merchantId} publishableKey={process.env.STRIPE_PUBLISHABLE_KEY} />;
+  return <CheckoutClient key={merchantId} merchantId={merchantId} publishableKey={process.env.STRIPE_PUBLISHABLE_KEY} />;
 }

@@ -29,7 +29,7 @@ export function MerchantShell({ children }: { children: ReactNode }) {
   if (!ready) return <Loading />;
   if (!merchantId) return <IdentityPicker onPick={setMerchantId} />;
   return (
-    <Authed merchantId={merchantId} onSwitch={() => setMerchantId(null)}>
+    <Authed key={merchantId} merchantId={merchantId} onSwitch={() => setMerchantId(null)}>
       {children}
     </Authed>
   );

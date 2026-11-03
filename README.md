@@ -1,118 +1,66 @@
-<!-- OWNER: P1 -->
 # Stripe Social Impact
 
-Phase A foundation for a TEST MODE ONLY hackathon. API routes return JSON 501 until their owners implement them. UI pages are placeholders. Connect helpers, payment handlers, donation calculation, and seed are intentionally NotImplemented; do not interpret this scaffold as working payments.
+A test-mode hackathon app for merchant-funded percentage donations and customer round-ups. Built with Next.js, React, Prisma/SQLite, and Stripe Connect. Includes merchant settings, cause registration, checkout, webhook settlement, and impact reporting.
 
 ## Setup
 
-Use Node 22. Copy `.env.example` to `.env`, populate Stripe test credentials, then run:
+Use Node 22. Copy `.env.example` to `.env` and fill in Stripe **test-mode** keys. Never expose `STRIPE_SECRET_KEY`. The server passes only `STRIPE_PUBLISHABLE_KEY` to checkout and payment confirmation pages.
 
 ```sh
 npm ci
 npm run db:migrate
+npm run db:seed
 npm run dev
-npm run build
-npm test
-stripe listen --forward-to localhost:3000/api/webhooks/stripe
 ```
 
-Copy the CLI signing secret to STRIPE_WEBHOOK_SECRET. Use test card `4242 4242 4242 4242`, a future expiry, and any three-digit CVC once P2 checkout is implemented. STRIPE_PUBLISHABLE_KEY is intentionally not automatically exposed to the browser; P4 should receive it via its server page. Never expose STRIPE_SECRET_KEY. APP_URL defaults in the example to localhost:3000. PLATFORM_FEE_BPS defaults to zero. SQLite database URL is relative to prisma/schema.prisma.
+`DATABASE_URL` is relative to `prisma/schema.prisma`. Set `APP_URL` to the app's origin for Connect return URLs. `PLATFORM_FEE_BPS` defaults to zero and is deducted from the donation portion.
 
-`npm run db:seed` is a Phase B placeholder. Current migrations create schema only.
+Open `/merchant?merchantId=demo-roundup` or `/merchant?merchantId=demo-percent` for seeded merchants, `/causes` to browse causes, and `/shop/demo-roundup` for the storefront. The seed includes synthetic historical contributions. Seeded accounts start without Stripe accounts; complete merchant and cause onboarding before attempting payments. Rerunning the seed preserves real account setup and repairs legacy fake `acct_seed_*` account IDs.
 
-## Ownership
+Create a cause at `/causes/new` and follow its Stripe onboarding flow. To resume setup for a seeded cause, open `/causes/community-garden/onboarding/complete` (or another seeded slug). Choose an onboarded active cause in the merchant dashboard.
 
-| Owner | Paths |
-| --- | --- |
-| P1 | prisma/**, scripts/seed.ts, src/lib/db.ts, src/lib/contract/**, src/lib/stripe/client.ts, src/lib/stripe/connect.ts, src/lib/stripe/handlers/index.ts, src/lib/stripe/handlers/account.ts, src/app/api/causes/**, src/app/api/merchants/**, src/app/api/connect/**, .env.example, README.md, package.json |
-| P2 | src/lib/donation/**, src/lib/stripe/handlers/payment.ts, src/app/api/checkout/**, src/app/api/webhooks/stripe/route.ts |
-| P3 | src/app/merchant/**, src/components/merchant/** |
-| P4 | src/app/shop/**, src/app/causes/**, src/components/customer/** |
+Forward both platform payment events and connected-account events to the webhook endpoint:
 
-Phase A alone creates shared scaffold/configuration and teammate stubs. After merge, use feat/p<N>-<name> branches, p<N>: commits, and edit only owned files. Do not change dependencies or shared configuration; request P1 changes. Use src/mocks/p<N>/ for fixtures; do not depend on unmerged teammate code. No shared UI components.
+```sh
+stripe listen --forward-to localhost:3000/api/webhooks/stripe --forward-connect-to localhost:3000/api/webhooks/stripe
+```
 
-## Frozen interfaces
+Copy the listener signing secret into `STRIPE_WEBHOOK_SECRET`. Checkout uses the Stripe test card `4242 4242 4242 4242`, a future expiry, and any three-digit CVC.
 
-`src/lib/contract/index.ts` exports each named `*Schema` plus the corresponding inferred type (remove Schema suffix). Entity types: Merchant, Cause, Order, Donation, Quote. Requests: CreateCauseRequest, ListCausesRequest, CreateMerchantRequest, UpdateMerchantRequest, CheckoutQuoteRequest, CheckoutIntentRequest, MerchantOnboardRequest, CauseOnboardRequest, ConnectStatusRequest. Responses: CreateCauseResponse, GetCauseResponse, ListCausesResponse, CauseProgressResponse, CreateMerchantResponse, GetMerchantResponse, UpdateMerchantResponse, MerchantImpactResponse, CheckoutQuoteResponse, CheckoutIntentResponse, OnboardResponse, ConnectStatusResponse, ErrorResponse.
+For independent offline UI demos, set `NEXT_PUBLIC_USE_MOCKS=1` for merchant screens and/or `NEXT_PUBLIC_P4_MOCKS=1` for customer screens, then restart the dev server. These mock datasets are separate and do not exercise Stripe or the database.
 
-All money is integer cents. Database nullable fields serialize as null; dates as ISO strings. Quote requires a cause ID: P2 must reject checkout without a ready active cause. PATCH activeCauseId:null clears the selection. Aggregations in Phase B count TRANSFERRED rows only: gross amountCents, donorCount means contributions rather than unique people, orderCount means distinct represented orders, recent means newest ten contributions.
+## Checks
 
-Shared exports:
+```sh
+npm test
+npm run build
+npm audit
+```
 
-- `db`: PrismaClient singleton.
-- `stripe`: lazy shared Stripe client, pinned to 2026-10-28.endive, test keys only.
-- `webhookHandlers`: partial event-type registry. Handlers take Stripe.Event and return Promise<void>.
-- `createConnectedAccount({kind,id,name,email?}): Promise<Stripe.Account>`.
-- `createOnboardingLink(accountId,returnPath): Promise<{url:string}>`.
-- `getAccountStatus(accountId): Promise<ConnectStatusResponse>`.
-- `calculateQuote(merchant: Pick<Merchant,'id'|'ruleType'|'percentageBps'|'activeCauseId'>, request: CheckoutQuoteRequest): Quote`.
+Tests use temporary SQLite databases and mocked Stripe calls. They do not charge cards or create external accounts. The build generates the Prisma client and checks TypeScript. The `@prisma/config` dependency has a scoped `deepmerge-ts` 8.0.0 override to address the recursive-merge advisory while retaining Prisma 6; migrations, seeding, tests, and builds validate compatibility.
 
-All route handlers accept Request and a context with asynchronous params. P2 must verify webhook signatures and make payment processing idempotent. Stripe mutations must use idempotency keys.
+## Contracts and behavior
 
-Connect implementation is Phase C: approved v1 controller configuration (US, Express dashboard, Stripe requirement collection, application fees/losses, transfers capability). GET /api/connect/refresh?kind=merchant|cause&id= is the approved additional refresh endpoint. Completion pages are /merchant/onboarding/complete and /causes/[slug]/onboarding/complete. Read current Stripe Connect, Account Links, and testing docs before implementation.
+`src/lib/contract/index.ts` is the shared Zod/type contract for API responses, request validation, and both UIs. All money is integer USD cents. Nullable database fields serialize as `null`; dates serialize as ISO strings. Next.js route params are asynchronous.
 
-Merge the Phase A branch to main before teammates branch from it. Phase B data APIs/seed and Phase C Connect onboarding remain follow-up work.
+- Round-up adds the difference to the **next** dollar; an exact-dollar subtotal adds 100 cents when opted in. Percentage donations come out of the item amount, without increasing the customer total.
+- Checkout requires a selected ACTIVE cause and completed onboarding for both accounts. Account status checks and webhooks persist changes in transfer readiness.
+- PaymentIntent creation requires an `Idempotency-Key`. Retries with the same input reuse the intent; conflicting input returns 409.
+- Payment webhooks validate signatures, reject live events, and reconcile merchant/cause transfers with stable Stripe idempotency keys. Full refunds reverse transfers. Partial refunds are flagged for manual reconciliation.
+- Impact and progress aggregate TRANSFERRED donation rows. `donorCount` means contributions, and `orderCount` counts distinct represented orders. Recent progress includes the newest ten contributions.
 
-Dependency recovery: initial installation succeeded with `npm install --legacy-peer-deps`; the lockfile was subsequently resolved normally. Stripe browser packages are pinned to a compatible pair. npm audit reports three high-severity findings in the Prisma 6 development-tool dependency chain (deepmerge-ts); its suggested fix requires a Prisma major-version migration, which is not applied in this scaffold.
+## Demo limitations
 
-## Phase A exact file inventory
+This is a test-mode demo with no authentication or merchant authorization. Merchant IDs select identities; do not expose it as a production payment service. Checkout accepts a client-provided subtotal rather than a server-owned product/order catalog.
 
-Added:
+Webhook serialization currently protects only one Node process. Multiple workers require a durable per-order reconciliation lock. Stripe creation idempotency keys have a retention window; reconcile orphan intents before retries after that window. Partial refunds require manual reconciliation. Automated tests use Stripe mocks; a real test-mode checkout/onboarding/refund walkthrough still requires configured credentials and the Stripe listener.
 
-- `.env.example`
-- `.gitignore`
-- `README.md`
-- `next-env.d.ts`
-- `package-lock.json`
-- `package.json`
-- `postcss.config.mjs`
-- `prisma/migrations/20261103230529_init/migration.sql`
-- `prisma/migrations/migration_lock.toml`
-- `prisma/schema.prisma`
-- `scripts/seed.ts`
-- `src/app/api/causes/[slug]/progress/route.ts`
-- `src/app/api/causes/[slug]/route.ts`
-- `src/app/api/causes/route.ts`
-- `src/app/api/checkout/intent/route.ts`
-- `src/app/api/checkout/quote/route.ts`
-- `src/app/api/connect/cause/onboard/route.ts`
-- `src/app/api/connect/merchant/onboard/route.ts`
-- `src/app/api/connect/refresh/route.ts`
-- `src/app/api/connect/status/route.ts`
-- `src/app/api/merchants/[id]/impact/route.ts`
-- `src/app/api/merchants/[id]/route.ts`
-- `src/app/api/merchants/route.ts`
-- `src/app/api/webhooks/stripe/route.ts`
-- `src/app/causes/[slug]/onboarding/complete/page.tsx`
-- `src/app/causes/[slug]/page.tsx`
-- `src/app/causes/page.tsx`
-- `src/app/globals.css`
-- `src/app/layout.tsx`
-- `src/app/merchant/onboarding/complete/page.tsx`
-- `src/app/merchant/page.tsx`
-- `src/app/page.tsx`
-- `src/app/shop/[merchantId]/page.tsx`
-- `src/components/customer/CauseCard.tsx`
-- `src/components/customer/Shop.tsx`
-- `src/components/merchant/MerchantDashboard.tsx`
-- `src/lib/contract/index.test.ts`
-- `src/lib/contract/index.ts`
-- `src/lib/contract/stripe-client.test.ts`
-- `src/lib/db.ts`
-- `src/lib/donation/index.ts`
-- `src/lib/stripe/client.ts`
-- `src/lib/stripe/connect.ts`
-- `src/lib/stripe/handlers/account.ts`
-- `src/lib/stripe/handlers/index.ts`
-- `src/lib/stripe/handlers/payment.ts`
-- `src/mocks/p1/.gitkeep`
-- `src/mocks/p2/.gitkeep`
-- `src/mocks/p3/.gitkeep`
-- `src/mocks/p4/.gitkeep`
-- `tsconfig.json`
+## Layout
 
-Removed obsolete starter files:
-
-- `api/checkout/route.js`
-- `layout.js`
-- `page.js`
+- `src/app/api`: causes, merchants, Connect, checkout, and webhooks
+- `src/lib/contract`: shared runtime schemas and types
+- `src/lib/donation`, `src/lib/stripe`: totals, account setup, and settlement
+- `src/app/merchant`, `src/components/merchant`: merchant UI
+- `src/app/shop`, `src/app/causes`, `src/components/customer`: customer/cause UI
+- `prisma`, `scripts/seed.ts`: schema, migrations, and sample data
+- `src/mocks`: independent UI/test fixtures

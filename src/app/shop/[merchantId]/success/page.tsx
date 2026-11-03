@@ -5,5 +5,5 @@ export const dynamic = "force-dynamic";
 
 export default async function SuccessPage({ params }: { params: Promise<{ merchantId: string }> }) {
   const { merchantId } = await params;
-  return <SuccessClient merchantId={merchantId} publishableKey={process.env.STRIPE_PUBLISHABLE_KEY} />;
+  return <SuccessClient key={merchantId} merchantId={merchantId} publishableKey={process.env.STRIPE_PUBLISHABLE_KEY} />;
 }

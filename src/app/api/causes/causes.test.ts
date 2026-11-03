@@ -18,7 +18,7 @@ beforeAll(async () => {
   progress = await import("./[slug]/progress/route");
 }, 60000);
 beforeEach(() => clearTables(db));
-afterAll(() => db.$disconnect());
+afterAll(() => db?.$disconnect());
 
 describe("causes", () => {
   it("creates DRAFT cause with slug and suffixes collisions", async () => {

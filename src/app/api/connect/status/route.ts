@@ -17,7 +17,7 @@ export async function GET(_request: Request, _context: { params: Promise<Record<
     if (!row.stripeAccountId) return Response.json({ onboardingComplete: false, requirementsDue: [] } satisfies ConnectStatusResponse);
     const account = await stripe.accounts.retrieve(row.stripeAccountId);
     const status = statusFromAccount(account);
-    if (status.onboardingComplete) await applyAccountStatus(account);
+    await applyAccountStatus(account);
     return Response.json(status satisfies ConnectStatusResponse);
   } catch (error) { return toErrorResponse(error, 'status'); }
 }
