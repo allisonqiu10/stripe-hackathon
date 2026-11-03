@@ -1,5 +1,4 @@
 // OWNER: P3
-<<<<<<< HEAD
 "use client";
 import Link from "next/link";
 import { getConnectStatus } from "@/components/merchant/api";
@@ -38,6 +37,3 @@ export default function OnboardingComplete() {
     </div>
   );
 }
-=======
-export default function Page() { return <main>Not implemented</main>; }
->>>>>>> 39482c32ee48d8c7cff6c9985be88707d7d82ae9
