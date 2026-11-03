@@ -27,6 +27,17 @@ describe("api response validation", () => {
   });
 });
 
+describe("api.intent", () => {
+  it("sends the Idempotency-Key header", async () => {
+    const q = { merchantId: "m", itemAmountCents: 435, roundUp: true, causeId: "c", donationCents: 65, totalCents: 500, ruleType: "ROUND_UP" };
+    const f = vi.fn(async () => new Response(JSON.stringify({ clientSecret: "s", paymentIntentId: "pi_1", quote: q }), { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    await api.intent({ merchantId: "m", itemAmountCents: 435, roundUp: true }, "key-1");
+    const init = (f.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBe("key-1");
+  });
+});
+
 describe("isSafeRedirect", () => {
   it("only allows https stripe.com hosts", () => {
     expect(isSafeRedirect("https://connect.stripe.com/setup/e/x")).toBe(true);

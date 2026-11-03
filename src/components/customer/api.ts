@@ -31,7 +31,7 @@ export class ApiError extends Error {
   }
 }
 
-type Init = { method?: string; body?: unknown; signal?: AbortSignal };
+type Init = { method?: string; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> };
 
 /** Fetch + validate against the contract schema so a drifting server can't crash the UI (or show bad money). */
 async function request<T>(path: string, schema: ZodType<T>, init?: Init): Promise<T> {
@@ -60,7 +60,7 @@ async function rawRequest(path: string, init?: Init): Promise<unknown> {
   try {
     res = await fetch(path, {
       method: init?.method ?? "GET",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...init?.headers },
       body,
       signal: init?.signal,
       cache: "no-store",
@@ -83,8 +83,8 @@ async function rawRequest(path: string, init?: Init): Promise<unknown> {
   return data;
 }
 
-const post = <T>(path: string, schema: ZodType<T>, body: unknown, signal?: AbortSignal) =>
-  request<T>(path, schema, { method: "POST", body, signal });
+const post = <T>(path: string, schema: ZodType<T>, body: unknown, signal?: AbortSignal, headers?: Record<string, string>) =>
+  request<T>(path, schema, { method: "POST", body, signal, headers });
 
 export const api = {
   listCauses: (q: { city?: string; status?: string } = {}) => {
@@ -100,8 +100,11 @@ export const api = {
   getMerchant: (id: string) => request<Merchant>(`/api/merchants/${encodeURIComponent(id)}`, MerchantSchema),
   quote: (b: { merchantId: string; itemAmountCents: number; roundUp: boolean }, signal?: AbortSignal) =>
     post<Quote>("/api/checkout/quote", QuoteSchema, b, signal),
-  intent: (b: { merchantId: string; itemAmountCents: number; roundUp: boolean }) =>
-    post<CheckoutIntentResponse>("/api/checkout/intent", CheckoutIntentResponseSchema, b),
+  /** P2 requires an Idempotency-Key: same key + same input returns the same PaymentIntent. */
+  intent: (b: { merchantId: string; itemAmountCents: number; roundUp: boolean }, idempotencyKey: string) =>
+    post<CheckoutIntentResponse>("/api/checkout/intent", CheckoutIntentResponseSchema, b, undefined, {
+      "Idempotency-Key": idempotencyKey,
+    }),
   onboardCause: (causeId: string) => post<OnboardResponse>("/api/connect/cause/onboard", OnboardResponseSchema, { causeId }),
   causeStatus: (id: string) =>
     request<ConnectStatusResponse>(`/api/connect/status?kind=cause&id=${encodeURIComponent(id)}`, ConnectStatusResponseSchema),

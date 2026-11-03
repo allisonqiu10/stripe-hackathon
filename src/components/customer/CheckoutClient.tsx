@@ -1,7 +1,7 @@
 // OWNER: P4
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "./api";
 import { loadCart, subtotalCents } from "./cart";
 import { formatCents, formatQuoteLine } from "./format";
@@ -17,6 +17,8 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [intent, setIntent] = useState<CheckoutIntentResponse | null>(null);
   const [creating, setCreating] = useState(false);
+  // One idempotency key per distinct order: retries reuse the same PaymentIntent, edits get a new one.
+  const intentKeys = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false); // intent kept, but user is changing the order
   const [intentError, setIntentError] = useState<string | null>(null);
 
@@ -65,7 +67,10 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
     setCreating(true);
     setIntentError(null);
     try {
-      setIntent(await api.intent({ merchantId, itemAmountCents: subtotal, roundUp: effectiveRoundUp }));
+      const orderSig = `${merchantId}:${subtotal}:${effectiveRoundUp}`;
+      let key = intentKeys.current.get(orderSig);
+      if (!key) intentKeys.current.set(orderSig, (key = crypto.randomUUID()));
+      setIntent(await api.intent({ merchantId, itemAmountCents: subtotal, roundUp: effectiveRoundUp }, key));
       setEditing(false);
     } catch (e) {
       setIntentError(errorMessage(e));
