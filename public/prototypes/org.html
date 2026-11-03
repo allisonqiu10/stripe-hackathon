@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fundraisers Organization Prototype</title>
+<link rel="stylesheet" href="./shared.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="./shared.js"></script>
+<script>
+const ORG=F('pantry');
+const ui={form:null,req:null,q:'',acct:false,errors:{},busy:false,confirmClose:false};
+const app=document.getElementById('app');
+const route=()=>(location.hash.replace(/^#\/?/,'')||'fundraisers').split('/');
+const mine=()=>DB.fundraisers.filter(f=>f.org===ORG.org&&f.status!=='REMOVED');
+const reqs=()=>DB.requests.filter(r=>r.from==='pantry');
+const pendingCount=()=>reqs().filter(r=>r.status==='Pending').length;
+const bizName=id=>(NEAR.find(n=>n.id===id)||{b:id}).b;
+
+function shell(inner,over=''){
+ return `<div class="shell"><div class="side">
+  <div style="position:relative"><button class="switcher" style="width:100%" data-act="acct" aria-expanded="${ui.acct}"><span class="mark" style="background:#2b6312">GS</span><span class="ell">Green Street Pantry</span>${I('chev',14)}</button>
+   ${ui.acct?`<div class="menu"><button class="on">Green Street Pantry ${I('check',14,2)}</button><a href="./business.html" style="display:block;padding:8px;font-size:13px">Boneyard Coffee (business view)</a></div>`:''}</div>
+  ${[['home','Home'],['bal','Balances'],['tx','Transactions']].map(([i,t])=>`<button class="nav" data-act="stub">${I(i)}${t}</button>`).join('')}
+  <div class="group">Apps</div><a class="nav on" href="#/fundraisers">${I('heart')}Fundraisers</a>
+ </div><div class="main">
+  <div class="top"><div class="search">${I('search',14)}Search</div><div class="r">${concept}${I('help',18)}${I('bell',18)}${I('gear',18)}<span class="avatar">PR</span></div></div>
+  ${inner}</div></div>${over}${demobar()}`;
+}
+const demobar=()=>`<div class="demobar"><span class="tag">Prototype · Today is ${short(DB.today)}</span><button class="pri" data-act="sim">Simulate a day of sales</button><span class="sp"></span><a href="./business.html">Open business view</a><button data-act="reset">Reset demo</button></div>`;
+const head=(tab,act='')=>`<div class="apphead">${appIcon()}<h2>Fundraisers</h2><span class="gear">${I('gear',16)}</span><div class="act">${act}</div></div>
+ <div class="tabs" role="tablist">${[['fundraisers','Our fundraisers'],['businesses','Find businesses'],['requests','Requests',pendingCount()],['contributions','Contributions']].map(([r,n,c])=>`<a role="tab" aria-selected="${r===tab}" class="tab ${r===tab?'on':''}" href="#/${r}">${n}${c?`<span class="count">${c}</span>`:''}</a>`).join('')}</div>`;
+const NEWBTN='<a class="btn p" href="#/new">New fundraiser</a>';
+const fStatus=f=>f.status==='LIVE'?'Live':f.status==='DRAFT'?'Draft':'Closed';
+
+/* ───────── Contributions from every source ───────── */
+function contribRows(f){
+ const rows=(f.id==='pantry'?OTHER_GIFTS.pantry:[]).map(r=>({b:r.b,sup:r.sup,d:r.d,amt:r.amt,f}));
+ DB.partnerships.filter(p=>p.cause===f.id).forEach(p=>rows.push({b:ME.name,sup:`${supLabel(p)} · ${durLabel(p)}`,d:f.d,amt:p.donated,status:p.status,f}));
+ return rows;
+}
+
+/* ───────── Our fundraisers ───────── */
+function fundraisers(){
+ const fs=mine();
+ const lead=fs.find(f=>f.status==='LIVE');
+ const req=reqs().map(r=>r.biz);
+ const near=NEAR.filter(n=>!req.includes(n.id)&&!DB.partnerships.some(p=>n.id===ME.id&&p.cause==='pantry')).slice(0,4);
+ const gifts=lead?contribRows(lead):[];
+ return shell(`${head('fundraisers',NEWBTN)}<div class="page"><div class="cols"><div>
+  <h1 class="title" style="margin-bottom:16px">Our fundraisers</h1>
+  <div class="cardlist">${fs.map(f=>`<a class="fcard" href="#/f/${f.id}" style="flex-direction:row"><div class="cover" style="width:200px;flex:none;aspect-ratio:auto">${coverOf(f)}</div><div style="padding:16px;flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;gap:8px;align-items:center"><b class="ell" style="font-weight:600;font-size:16px">${esc(f.camp)}</b>${statusPill(fStatus(f))}</div><p class="blurb">${esc(f.blurb)}</p>
+    <div style="margin-top:auto"><div class="bar"><i style="width:${pctOf(f)*100}%"></i></div><div class="num small sub" style="margin-top:4px"><b style="color:var(--ink);font-weight:600;font-size:14px">${m0(raised(f))}</b> of ${m0(f.goal)}${f.status==='LIVE'?` · ${leftDays(f)} days left · ${partnersOf(f)} local ${partnersOf(f)===1?'partner':'partners'}`:''}</div></div></div></a>`).join('')}</div>
+ </div><div>
+  <div class="panel" style="padding:16px"><h2 class="h3">Businesses near you</h2><div class="sub small" style="margin-bottom:8px">Local shops that accept fundraiser requests.</div>
+  ${near.length?near.map((n,i)=>`<div style="padding:8px 0;${i?'border-top:1px solid var(--rule)':''}"><div class="money"><span style="font-weight:500">${esc(n.b)}</span><span class="sub small num" style="white-space:nowrap">${n.d} mi</span></div><div class="small sub" style="margin-bottom:8px">${esc(n.k)} · ${esc(n.fit)}</div><button class="btn sm" data-act="request" data-id="${n.id}">Request partnership</button></div>`).join(''):'<div class="sub">You have asked every nearby business.</div>'}
+  <div style="padding-top:8px;border-top:1px solid var(--rule)"><a class="link" href="#/businesses">See all businesses</a></div></div>
+ </div></div></div>`,requestDrawer());
+}
+
+/* ───────── One fundraiser ───────── */
+function manage(f){
+ const rows=contribRows(f);
+ const total=rows.reduce((a,r)=>a+r.amt,0);
+ return shell(`<div class="crumbs"><a href="#/fundraisers"><b>Fundraisers</b></a>${I('chevr',12)}<span>${esc(f.camp)}</span></div>
+ <div class="wide" style="padding:8px 32px 0;display:flex;align-items:center;gap:8px"><h1 class="title" style="font-size:24px;line-height:32px">${esc(f.camp)}</h1>${statusPill(fStatus(f))}<span style="flex:1"></span>
+  ${f.status==='LIVE'?`<a class="btn" href="#/public/${f.id}">View public page</a>`:''}<a class="btn" href="#/edit/${f.id}">${f.status==='DRAFT'?'Continue editing':'Edit fundraiser'}</a>${f.status==='LIVE'?`<button class="btn p" data-act="request" data-id="" data-f="${f.id}">Request a partnership</button>`:''}</div>
+ <div class="page" style="padding-top:16px"><div class="cols"><div>
+  <div class="section"><div style="display:flex;align-items:baseline;justify-content:space-between"><div><span class="stat num">${m0(raised(f))}</span> <span class="sub">raised of ${m0(f.goal)} goal</span></div><span class="sub num">${pctS(pctOf(f))} · ${leftDays(f)} days left</span></div><div class="bar" style="height:8px;border-radius:4px;margin-top:8px"><i style="width:${pctOf(f)*100}%"></i></div></div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:8px"><h2 class="h3">Contributions by business</h2><span class="sub">${rows.length} ${rows.length===1?'business':'businesses'}</span></div>
+  ${rows.length?`<table><thead><tr><th>Business</th><th>Support</th><th class="num">Distance</th><th class="num">Contributed</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:500">${esc(r.b)}</td><td class="sub">${esc(r.sup)}</td><td class="num sub">${r.d} mi</td><td class="num">${m2(r.amt)}</td></tr>`).join('')}<tr><td style="font-weight:600">Total</td><td></td><td></td><td class="num" style="font-weight:600">${m2(total)}</td></tr></tbody></table>`
+   :`<div class="empty"><div>No contributions yet.</div><div class="small sub">Contributions appear here once a business partners with you.</div></div>`}
+  ${f.status==='LIVE'?`<div style="margin-top:32px">${ui.confirmClose?`<div class="panel" style="padding:16px"><b style="font-weight:600">Close ${esc(f.camp)}?</b><p class="sub" style="margin:4px 0 8px">Businesses can no longer find it. Money already raised stays with you.</p><div style="display:flex;gap:8px"><button class="btn" data-act="noclose">Keep it open</button><button class="btn danger" data-act="close" data-id="${f.id}">Close fundraiser</button></div></div>`:`<button class="btn danger" data-act="askclose">Close fundraiser</button>`}</div>`:''}
+ </div><div><h2 class="h3" style="margin-bottom:8px">How businesses see it</h2>${fundCard(f)}</div></div></div>`,requestDrawer());
+}
+
+/* ───────── Create or edit ───────── */
+const blank=()=>({id:null,camp:'',blurb:'',about:'',cat:CATS[0],goal:'',ends:'',amts:[['','']],durs:{one:true,range:true,ongoing:true},rules:{PERCENTAGE:true,ROUND_UP:true},discover:true,publicPage:true,image:null});
+const EXAMPLE={camp:'Spring Garden Boxes',blurb:'Raised garden boxes behind the pantry, so neighbors get fresh greens from May through October.',about:'A small garden means fresh food the pantry never has to buy. Volunteers build the boxes in April and families harvest through October.',goal:'2500',ends:'2027-04-30',amts:[['85','Builds one raised garden box'],['20','Buys soil and seeds for one box']]};
+function fromFundraiser(f){return{id:f.id,camp:f.camp,blurb:f.blurb,about:f.about||'',cat:f.cat,goal:String(f.goal),ends:f.ends,amts:(f.impact&&f.impact.length?f.impact:[['','']]).map(([a,t])=>[String(a),t]),durs:f.durs||{one:true,range:true,ongoing:true},rules:f.rules||{PERCENTAGE:true,ROUND_UP:true},discover:true,publicPage:f.publicPage!==false,image:f.image||null}}
+function previewF(){
+ const x=ui.form;
+ return{id:x.id||'preview',em:'pantry',org:ORG.org,camp:x.camp||'Your fundraiser name',type:ORG.type,cat:x.cat,d:ORG.d,b:ORG.b,goal:+x.goal||0,others:0,ends:x.ends||addDays(DB.today,60),otherPartners:0,fg:ORG.fg,blurb:x.blurb,about:x.about,impact:x.amts.filter(a=>+a[0]&&a[1]).map(([a,t])=>[+a,t]),cover:'garden',image:x.image,status:'LIVE'};
+}
+const previewCol=()=>{const f=previewF();return `<h2 class="h3" style="margin-bottom:8px">How businesses see it</h2>${fundCard(f)}
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin:24px 0 8px"><h2 class="h3">Your public page</h2></div>
+  ${ui.form.publicPage?`<div class="thumbwrap"><div>${publicPage(f)}</div></div>`:'<div class="empty"><div>No public page.</div><div class="small sub">Only local businesses in Discover will see this.</div></div>'}`};
+function validate(){
+ const x=ui.form,e={};
+ if(!x.camp.trim())e.camp='Add a fundraiser name.';
+ if(!x.blurb.trim())e.blurb='Add a one-sentence description.';else if(x.blurb.length>140)e.blurb='Keep it to 140 characters or fewer.';
+ if(!(+x.goal>0))e.goal='Enter a goal above $0.';
+ if(!x.ends)e.ends='Choose an end date.';else if(x.ends<=DB.today)e.ends='Choose a date after today.';
+ if(!Object.values(x.durs).some(Boolean)||!Object.values(x.rules).some(Boolean))e.ask='Choose at least one option in each list.';
+ return e;
+}
+const fe=k=>ui.errors[k]?`<div class="err">${esc(ui.errors[k])}</div>`:'';
+function formPage(){
+ const x=ui.form;
+ const cb=(g,k,t)=>`<label class="cb"><input type="checkbox" data-grp="${g}" data-k="${k}" ${x[g][k]?'checked':''}>${t}</label>`;
+ return shell(`<div class="crumbs"><a href="#/fundraisers"><b>Fundraisers</b></a>${I('chevr',12)}<span>${x.id?'Edit fundraiser':'New fundraiser'}</span></div>
+ <div class="wide" style="padding:8px 32px 0;display:flex;align-items:center;gap:8px"><h1 class="title" style="font-size:24px;line-height:32px;flex:1">Tell local businesses your story</h1>${x.id?'':'<button class="link" data-act="example" style="margin-right:8px">Fill with example</button>'}<button class="btn" data-act="draft">Save draft</button><button class="btn p lg" data-act="publish" ${ui.busy?'disabled':''}>${ui.busy?'<span class="spin"></span> Publishing':'Publish fundraiser'}</button></div>
+ <div class="page"><div class="formgrid"><div>
+  <div class="formsec"><h2 class="h3">Your story</h2>
+   <div><label class="fl" for="camp">Fundraiser name</label><div class="input ${ui.errors.camp?'bad':''}"><input id="camp" data-f="camp" value="${esc(x.camp)}"></div>${fe('camp')}</div>
+   <div><label class="fl" for="blurb">Short description</label><div class="input area ${ui.errors.blurb?'bad':''}"><textarea id="blurb" rows="2" data-f="blurb">${esc(x.blurb)}</textarea></div>${fe('blurb')}<div class="small sub" style="margin-top:4px">Shown on every card. <span id="cnt">${x.blurb.length}</span> of 140 characters.</div></div>
+   <div><label class="fl" for="about">The longer story</label><div class="input area"><textarea id="about" rows="3" data-f="about">${esc(x.about)}</textarea></div></div>
+   <div><span class="fl">Cover photo</span><div style="display:grid;grid-template-columns:176px 1fr;gap:16px;align-items:center"><div class="cover" style="border-radius:8px" id="covthumb">${x.image?`<img src="${x.image}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`:cover('garden')}</div><div><label class="btn" style="cursor:pointer">Upload photo<input type="file" accept="image/*" data-act-file hidden></label><div class="small sub" style="margin-top:8px">${x.image?'Your photo appears on every card.':'Real people and places work best. The drawing is a placeholder.'}</div></div></div></div>
+   <div><label class="fl" for="cat">Category</label><div class="input"><select id="cat" data-f="cat">${CATS.map(c=>`<option ${c===x.cat?'selected':''}>${c}</option>`).join('')}</select></div></div>
+  </div>
+  <div class="formsec"><h2 class="h3">Your goal</h2>
+   <div class="fields c2"><div><label class="fl" for="goal">Goal amount</label><div class="input num ${ui.errors.goal?'bad':''}"><span class="sub">$</span><input id="goal" type="number" min="1" data-f="goal" value="${esc(x.goal)}"></div>${fe('goal')}</div><div><label class="fl" for="ends">End date</label><div class="input ${ui.errors.ends?'bad':''}"><input id="ends" type="date" min="${addDays(DB.today,1)}" data-f="ends" value="${esc(x.ends)}"></div>${fe('ends')}</div></div>
+   <div><span class="fl">What each amount does</span><div class="fields" style="grid-template-columns:120px 1fr;gap:8px" id="amts">${x.amts.map(([a,t],i)=>`<div class="input num"><span class="sub">$</span><input type="number" min="0" aria-label="Amount ${i+1}" data-amt="${i}" data-p="0" value="${esc(a)}"></div><div class="input"><input aria-label="What amount ${i+1} does" placeholder="Builds one raised garden box" data-amt="${i}" data-p="1" value="${esc(t)}"></div>`).join('')}</div><div style="margin-top:8px"><button class="link" data-act="addamt">Add another amount</button></div></div>
+  </div>
+  <div class="formsec"><h2 class="h3">What you're asking businesses for</h2><div class="fields c2"><div style="display:flex;flex-direction:column;gap:8px"><span class="fl" style="margin:0">How long</span>${cb('durs','one','One-day events')}${cb('durs','range','Date ranges')}${cb('durs','ongoing','Ongoing support')}</div><div style="display:flex;flex-direction:column;gap:8px"><span class="fl" style="margin:0">How they give</span>${cb('rules','PERCENTAGE','Percentage of sales')}${cb('rules','ROUND_UP','Customer round-ups')}</div></div>${fe('ask')}</div>
+  <div class="formsec"><h2 class="h3">Where it appears</h2>
+   <div class="swrow"><div><b style="font-weight:500">Local business Discover</b><div class="small sub">Businesses within 5 mi can find and support it. Required.</div></div><span class="switch" aria-label="Always on"></span></div>
+   <div class="swrow"><div><b style="font-weight:500">Public page on stripe.com</b><div class="small sub">A shareable page that promotes your fundraiser.</div></div><button class="switch ${x.publicPage?'':'off'}" role="switch" aria-checked="${x.publicPage}" aria-label="Public page on stripe.com" data-act="togglepub"></button></div>
+  </div>
+ </div><div class="previewcol" id="preview">${previewCol()}</div></div></div>`);
+}
+function refreshPreview(){const p=document.getElementById('preview');if(p)p.innerHTML=previewCol();const c=document.getElementById('cnt');if(c)c.textContent=ui.form.blurb.length}
+function saveFundraiser(status){
+ const x=ui.form,exists=x.id&&F(x.id);
+ const rec={...(exists||{id:'f_'+Date.now(),org:ORG.org,em:'pantry',type:ORG.type,d:ORG.d,b:ORG.b,fg:ORG.fg,others:0,otherPartners:0,organizer:ORG.organizer,founded:ORG.founded,cover:'garden'}),
+  camp:x.camp.trim()||'Untitled fundraiser',blurb:x.blurb.trim(),about:x.about.trim(),cat:x.cat,goal:+x.goal||0,ends:x.ends||addDays(DB.today,60),impact:x.amts.filter(a=>+a[0]&&a[1].trim()).map(([a,t])=>[+a,t.trim()]),durs:x.durs,rules:x.rules,publicPage:x.publicPage,image:x.image,status};
+ if(exists)DB.fundraisers[DB.fundraisers.indexOf(exists)]=rec;else DB.fundraisers.push(rec);
+ saveDB();return rec;
+}
+function published(f){
+ return shell(`<div class="crumbs"><a href="#/fundraisers"><b>Fundraisers</b></a>${I('chevr',12)}<span>${esc(f.camp)}</span></div>
+ <div class="page"><div class="formgrid"><div>
+  <div class="success">${I('check',20,2.4)}</div><h1 class="title" style="font-size:24px;line-height:32px;margin-top:8px">${esc(f.camp)} is live</h1>
+  <p class="sub" style="margin:4px 0 24px">Businesses within 5 mi can now find it in Discover.</p>
+  <h2 class="h3" style="margin-bottom:8px">Next, ask a shop you know</h2><div class="sub" style="margin-bottom:16px">A shop you already know is a good place to start.</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p lg" data-act="request" data-id="" data-f="${f.id}">Request a partnership</button>${f.publicPage!==false?`<a class="btn lg" href="#/public/${f.id}">View public page</a>`:''}<a class="btn lg" href="./business.html#/f/${f.id}">See it as a business</a></div>
+ </div><div><h2 class="h3" style="margin-bottom:8px">How businesses see it</h2>${fundCard(f)}</div></div></div>`,requestDrawer());
+}
+
+/* ───────── Find businesses ───────── */
+function bizRows(){
+ const q=ui.q.trim().toLowerCase();
+ const list=NEAR.filter(n=>!q||(n.b+' '+n.k).toLowerCase().includes(q)).sort((a,b)=>a.d-b.d);
+ return list.length?`<table><thead><tr><th>Business</th><th>Open to</th><th class="num">Distance</th><th class="num"></th></tr></thead><tbody>${list.map(n=>{const r=reqs().find(x=>x.biz===n.id);return `<tr><td><div style="font-weight:500">${esc(n.b)}</div><small>${esc(n.k)}</small></td><td class="sub">${esc(n.fit)}</td><td class="num sub">${n.d} mi</td><td class="num">${r?statusPill(r.status):`<button class="btn sm" data-act="request" data-id="${n.id}">Request partnership</button>`}</td></tr>`}).join('')}</tbody></table>`
+ :`<div class="empty"><div>No businesses match “${esc(ui.q)}”.</div></div>`;
+}
+const businesses=()=>shell(`${head('businesses',NEWBTN)}<div class="page"><h1 class="title" style="margin-bottom:16px">Businesses near Green St</h1>
+ <div class="input" style="max-width:320px;margin-bottom:16px;height:32px">${I('search',14)}<input id="bizq" placeholder="Search businesses" aria-label="Search businesses" value="${esc(ui.q)}"></div><div id="bizlist">${bizRows()}</div></div>`,requestDrawer());
+
+/* ───────── Requests ───────── */
+function requestsView(){
+ const rs=[...reqs()].sort((a,b)=>(a.status==='Pending'?0:1)-(b.status==='Pending'?0:1));
+ return shell(`${head('requests',NEWBTN)}<div class="page"><h1 class="title" style="margin-bottom:16px">Partnership requests</h1>
+ ${rs.length?`<table><thead><tr><th>Business</th><th>Fundraiser</th><th>Ask</th><th>Status</th><th class="num">Updated</th><th class="num"></th></tr></thead><tbody>${rs.map(r=>`<tr><td style="font-weight:500">${esc(bizName(r.biz))}</td><td class="sub">${esc(F(r.cause).camp)}</td><td class="sub">${r.rule==='ROUND_UP'?'Round-ups':r.pct+'% of sales'}, ${r.dur==='one'?short(r.date):r.dur==='range'?'from '+short(r.date):'ongoing'}</td><td>${statusPill(r.status)}</td><td class="num sub">${esc(r.when)}</td><td class="num">${r.status==='Pending'?`<button class="link" data-act="withdraw" data-id="${r.id}">Withdraw</button>`:''}</td></tr>`).join('')}</tbody></table>`
+ :`<div class="empty"><div>No requests yet.</div><div class="small sub">Your requests to local businesses appear here.</div></div>`}</div>`,requestDrawer());
+}
+
+/* ───────── Contributions ───────── */
+function contributions(){
+ const rows=mine().flatMap(contribRows).sort((a,b)=>b.amt-a.amt);
+ const total=rows.reduce((a,r)=>a+r.amt,0);
+ return shell(`${head('contributions',NEWBTN)}<div class="page"><h1 class="title">Contributions</h1><div class="sub" style="margin-bottom:16px">${m2(total)} from ${new Set(rows.map(r=>r.b)).size} local businesses.</div>
+ <table><thead><tr><th>Business</th><th>Fundraiser</th><th>Support</th><th class="num">Contributed</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:500">${esc(r.b)}</td><td class="sub">${esc(r.f.camp)}</td><td class="sub">${esc(r.sup)}</td><td class="num">${m2(r.amt)}</td></tr>`).join('')}<tr><td style="font-weight:600">Total</td><td></td><td></td><td class="num" style="font-weight:600">${m2(total)}</td></tr></tbody></table></div>`,requestDrawer());
+}
+
+/* ───────── Request drawer ───────── */
+function openRequest(biz,fid){
+ const lf=mine().filter(f=>f.status==='LIVE');
+ const f=F(fid)||lf[0];if(!f){toast('Publish a fundraiser first');return}
+ ui.req={biz:biz||'',cause:f.id,dur:'one',date:addDays(DB.today,14),rule:'PERCENTAGE',pct:5,msg:'',err:null,busy:false};
+ ui.req.msg=defaultMsg();rerender();
+}
+function defaultMsg(){const x=ui.req,f=F(x.cause);return `Hi! We're ${ORG.org}, a student-run group on Green St. Would you support ${f.camp}${x.rule==='ROUND_UP'?' with customer round-ups':` with ${x.pct}% of sales`}${x.dur==='one'?' for one day':x.dur==='range'?' for a couple of weeks':''}? Our volunteers will help spread the word.`}
+function requestDrawer(){
+ const x=ui.req;if(!x)return'';
+ const lf=mine().filter(f=>f.status==='LIVE');
+ const open=NEAR.filter(n=>!reqs().some(r=>r.biz===n.id));
+ const n=NEAR.find(b=>b.id===x.biz);
+ const opt=(name,v,t,d)=>`<label class="opt ${x[name]===v?'on':''}"><input type="radio" name="${name}" value="${v}" ${x[name]===v?'checked':''} data-rq="${name}"><b>${t}</b>${d?`<span>${d}</span>`:''}</label>`;
+ return `<div class="scrim" data-act="closereq"></div><div class="focus" role="dialog" aria-modal="true" aria-label="Request a partnership"><header><button class="x" data-act="closereq" aria-label="Close">${I('x',18)}</button><div class="h3" style="font-size:18px">Request a partnership</div><div class="sub">${n?`${esc(n.b)} · ${esc(n.k)} · ${n.d} mi away`:'Choose a nearby business'}</div></header>
+ <div class="body">
+  ${n?'':`<div><label class="fl">Business</label><div class="input ${x.err?'bad':''}"><select data-rq="biz"><option value="">Choose a business</option>${open.map(b=>`<option value="${b.id}">${esc(b.b)} (${b.d} mi)</option>`).join('')}</select></div>${x.err?`<div class="err">${esc(x.err)}</div>`:''}</div>`}
+  <div><label class="fl">Fundraiser</label><div class="input"><select data-rq="cause">${lf.map(f=>`<option value="${f.id}" ${f.id===x.cause?'selected':''}>${esc(f.camp)}</option>`).join('')}</select></div></div>
+  <div><span class="fl">What are you asking for?</span><div class="opts c3">${opt('dur','one','One day','A single event')}${opt('dur','range','Date range','A set stretch')}${opt('dur','ongoing','Ongoing','Until they stop it')}</div>
+   <div class="opts c2" style="margin-top:16px">${opt('rule','PERCENTAGE','Percentage of sales','')}${opt('rule','ROUND_UP','Customer round-up','')}</div>
+   <div class="fields c2" style="margin-top:8px">${x.dur==='ongoing'?'':`<div class="input"><input type="date" min="${addDays(DB.today,1)}" value="${x.date}" data-rqi="date" aria-label="Date"></div>`}${x.rule==='PERCENTAGE'?`<div class="input"><select data-rq="pct" aria-label="Percentage">${[1,2,3,5,10].map(p=>`<option value="${p}" ${+x.pct===p?'selected':''}>${p}% of sales</option>`).join('')}</select></div>`:''}</div></div>
+  <div><label class="fl" for="rqmsg">Message</label><div class="input area"><textarea id="rqmsg" rows="5" data-rqi="msg">${esc(x.msg)}</textarea></div></div>
+  <div class="panel" style="padding:16px"><b style="font-weight:600">The business will see</b><div class="sub">Your mission, goal and progress, and the businesses already helping.</div></div>
+ </div>
+ <footer><button class="btn" data-act="closereq">Cancel</button><button class="btn p" data-act="sendreq" ${x.busy?'disabled':''}>${x.busy?'<span class="spin"></span> Sending':'Send request'}</button></footer></div>`;
+}
+
+/* ───────── Router ───────── */
+function view(){
+ const [a,b]=route();
+ if(a==='public'){const f=F(b);return f?publicPage(f,'#/f/'+b):''}
+ if(a==='new'){if(!ui.form||ui.form.id)ui.form=blank();return formPage()}
+ if(a==='edit'){const f=F(b);if(!f)return fundraisers();if(!ui.form||ui.form.id!==b)ui.form=fromFundraiser(f);return formPage()}
+ ui.form=null;
+ if(a==='published'&&F(b))return published(F(b));
+ if(a==='f'&&F(b))return manage(F(b));
+ if(a==='businesses')return businesses();
+ if(a==='requests')return requestsView();
+ if(a==='contributions')return contributions();
+ return fundraisers();
+}
+function rerender(){app.innerHTML=view()}
+addEventListener('hashchange',()=>{ui.errors={};ui.confirmClose=false;ui.req=null;rerender();scrollTo(0,0)});
+addEventListener('storage',e=>{if(e.key!==KEY)return;loadDB();if(!ui.form&&!ui.req)rerender();else if(!ui.form&&ui.req)return});
+
+document.addEventListener('click',e=>{
+ if(!e.target.closest('.switcher,.menu')&&ui.acct){ui.acct=false;rerender()}
+ const t=e.target.closest('[data-act]');if(!t)return;
+ const act=t.dataset.act,id=t.dataset.id;
+ if(act==='stub')toast('This Dashboard page is outside the prototype');
+ if(act==='acct'){ui.acct=!ui.acct;rerender()}
+ if(act==='sim'){const r=simulateDay();toast(r.total?`${short(r.today)}: ${m2(r.total)} donated across ${r.n} ${r.n===1?'partnership':'partnerships'} at ${ME.name}`:`${short(r.today)}: nothing to donate today`);rerender()}
+ if(act==='reset'){resetDB();ui.form=null;ui.req=null;toast('Demo reset');location.hash='#/fundraisers';rerender()}
+ if(act==='example'){Object.assign(ui.form,EXAMPLE,{amts:EXAMPLE.amts.map(a=>[...a])});ui.errors={};rerender()}
+ if(act==='addamt'){ui.form.amts.push(['','']);rerender()}
+ if(act==='togglepub'){ui.form.publicPage=!ui.form.publicPage;rerender()}
+ if(act==='draft'){const f=saveFundraiser('DRAFT');ui.form=null;toast('Draft saved');location.hash='#/f/'+f.id}
+ if(act==='publish'){
+  ui.errors=validate();
+  if(Object.keys(ui.errors).length){rerender();const b=document.querySelector('.bad,.err');if(b)b.scrollIntoView({block:'center'});return}
+  ui.busy=true;rerender();setTimeout(()=>{ui.busy=false;const f=saveFundraiser('LIVE');ui.form=null;location.hash='#/published/'+f.id},800);
+ }
+ if(act==='request')openRequest(id,t.dataset.f);
+ if(act==='closereq'){ui.req=null;rerender()}
+ if(act==='sendreq'){const x=ui.req;if(!x.biz){x.err='Choose a business to ask.';rerender();return}
+  x.busy=true;rerender();setTimeout(()=>{DB.requests.push({id:'r_'+Date.now(),cause:x.cause,biz:x.biz,from:'pantry',dur:x.dur,date:x.date,pct:+x.pct,rule:x.rule,msg:x.msg,status:'Pending',when:'Sent '+short(DB.today)});saveDB();const b=bizName(x.biz);ui.req=null;toast('Request sent to '+b);if(route()[0]==='requests')rerender();else location.hash='#/requests'},600)}
+ if(act==='withdraw'){DB.requests=DB.requests.filter(r=>r.id!==id);saveDB();toast('Request withdrawn');rerender()}
+ if(act==='askclose'){ui.confirmClose=true;rerender()}
+ if(act==='noclose'){ui.confirmClose=false;rerender()}
+ if(act==='close'){const f=F(id);f.status='CLOSED';saveDB();ui.confirmClose=false;toast('Fundraiser closed');rerender()}
+});
+document.addEventListener('input',e=>{
+ const t=e.target;
+ if(t.dataset.f&&ui.form){ui.form[t.dataset.f]=t.value;refreshPreview();return}
+ if(t.dataset.amt!==undefined&&ui.form){ui.form.amts[+t.dataset.amt][+t.dataset.p]=t.value;refreshPreview();return}
+ if(t.dataset.rqi&&ui.req){ui.req[t.dataset.rqi]=t.value;return}
+ if(t.id==='bizq'){ui.q=t.value;document.getElementById('bizlist').innerHTML=bizRows()}
+});
+document.addEventListener('change',e=>{
+ const t=e.target;
+ if(t.dataset.grp&&ui.form){ui.form[t.dataset.grp][t.dataset.k]=t.checked;return}
+ if(t.dataset.rq&&ui.req){const stock=ui.req.msg===defaultMsg();ui.req[t.dataset.rq]=t.value;if(t.dataset.rq==='biz')ui.req.err=null;if(stock)ui.req.msg=defaultMsg();rerender();return}
+ if(t.hasAttribute('data-act-file')&&t.files[0]){
+  const img=new Image(),url=URL.createObjectURL(t.files[0]);
+  img.onload=()=>{const W=960,s=Math.min(1,W/img.width),c=document.createElement('canvas');c.width=img.width*s;c.height=img.height*s;c.getContext('2d').drawImage(img,0,0,c.width,c.height);ui.form.image=c.toDataURL('image/jpeg',.8);URL.revokeObjectURL(url);rerender()};
+  img.onerror=()=>toast('That file could not be read as an image');img.src=url;
+ }
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.req){ui.req=null;rerender()}});
+rerender();
+</script>
+</body>
+</html>
