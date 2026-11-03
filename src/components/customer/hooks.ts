@@ -20,7 +20,9 @@ export function useAsync<T>(fetcher: () => Promise<T>, deps: unknown[], interval
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  });
   const depsSig = JSON.stringify(deps);
   const depsKey = useRef(depsSig);
 

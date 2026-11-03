@@ -17,6 +17,7 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [intent, setIntent] = useState<CheckoutIntentResponse | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(false); // intent kept, but user is changing the order
   const [intentError, setIntentError] = useState<string | null>(null);
 
   const merchant = useAsync(() => api.getMerchant(merchantId), [merchantId]);
@@ -31,11 +32,12 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
   }, [merchantId]);
 
   const ruleType = merchant.data?.ruleType;
+  const merchantReady = merchant.data !== undefined; // identity-stable: polling/refetch must not re-quote
   const effectiveRoundUp = ruleType === "ROUND_UP" ? roundUp : false;
 
   // Server-side quote on every change; stale responses are ignored.
   useEffect(() => {
-    if (!merchant.data || !subtotal) return;
+    if (!merchantReady || !subtotal) return;
     const ctrl = new AbortController();
     setQuoteError(null);
     setQuote(null); // never show/accept a stale total while a new quote loads
@@ -51,14 +53,20 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
         }
       });
     return () => ctrl.abort();
-  }, [merchantId, merchant.data, subtotal, effectiveRoundUp]);
+  }, [merchantId, merchantReady, subtotal, effectiveRoundUp]);
 
   async function startPayment() {
     if (!subtotal) return;
+    // Reuse the existing PaymentIntent if the order is unchanged (avoids orphaned intents).
+    if (intent && intent.quote.itemAmountCents === subtotal && intent.quote.roundUp === effectiveRoundUp) {
+      setEditing(false);
+      return;
+    }
     setCreating(true);
     setIntentError(null);
     try {
       setIntent(await api.intent({ merchantId, itemAmountCents: subtotal, roundUp: effectiveRoundUp }));
+      setEditing(false);
     } catch (e) {
       setIntentError(errorMessage(e));
     } finally {
@@ -86,8 +94,8 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
 
   const causeTitle = cause.data?.title ?? "a local cause";
   const pctLabel = `${(merchant.data.percentageBps / 100).toString()}%`;
-  const locked = intent !== null;
-  const shown = intent?.quote ?? quote;
+  const locked = intent !== null && !editing;
+  const shown = locked ? intent!.quote : quote;
 
   return (
     <Page title="Checkout">
@@ -149,7 +157,7 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
         </div>
       </Card>
 
-      {intent ? (
+      {locked && intent ? (
         <div className="space-y-3">
           <PaymentForm
             publishableKey={publishableKey}
@@ -157,7 +165,7 @@ export default function CheckoutClient({ merchantId, publishableKey }: { merchan
             returnUrl={`${window.location.origin}/shop/${merchantId}/success`}
             payLabel={`Pay ${formatCents(intent.quote.totalCents)}`}
           />
-          <Button variant="secondary" className="w-full" onClick={() => setIntent(null)}>
+          <Button variant="secondary" className="w-full" onClick={() => setEditing(true)}>
             Edit order
           </Button>
         </div>

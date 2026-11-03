@@ -28,7 +28,7 @@ function Success({ merchantId, publishableKey }: { merchantId: string; publishab
   }, [merchantId]);
 
   useEffect(() => {
-    if (status === "succeeded" || status === "processing") clearCart(merchantId);
+    if (status === "succeeded") clearCart(merchantId);
   }, [status, merchantId]);
 
   if (payment.loading && !status) return <Page title="Confirming payment"><Spinner label="Confirming your payment…" /></Page>;
@@ -55,7 +55,7 @@ function Success({ merchantId, publishableKey }: { merchantId: string; publishab
       <Card className="mb-4">
         <p className="text-slate-800">
           {status === "processing"
-            ? "Your payment is processing. We'll count your donation once it clears."
+            ? "Your payment is processing. We'll count your donation once it clears. Please don't pay again."
             : "Your payment went through and your donation is on its way."}
         </p>
       </Card>

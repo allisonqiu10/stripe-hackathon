@@ -9,7 +9,17 @@ import type {
   Merchant,
   OnboardResponse,
   Quote,
-} from "@/lib/contract";
+} from "../../lib/contract";
+import {
+  CauseProgressResponseSchema,
+  CauseSchema,
+  CheckoutIntentResponseSchema,
+  ConnectStatusResponseSchema,
+  MerchantSchema,
+  OnboardResponseSchema,
+  QuoteSchema,
+} from "../../lib/contract";
+import type { ZodType } from "zod";
 
 export const USE_MOCKS = process.env.NEXT_PUBLIC_P4_MOCKS === "1";
 
@@ -21,13 +31,23 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: { method?: string; body?: unknown; signal?: AbortSignal }): Promise<T> {
+type Init = { method?: string; body?: unknown; signal?: AbortSignal };
+
+/** Fetch + validate against the contract schema so a drifting server can't crash the UI (or show bad money). */
+async function request<T>(path: string, schema: ZodType<T>, init?: Init): Promise<T> {
+  const raw = await rawRequest(path, init);
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) throw new ApiError("Unexpected response from server.", 502);
+  return parsed.data;
+}
+
+async function rawRequest(path: string, init?: Init): Promise<unknown> {
   const body = init?.body === undefined ? undefined : JSON.stringify(init.body);
   if (USE_MOCKS) {
     try {
       const { mockRequest } = await import("@/mocks/p4/server"); // not bundled unless mocks are on
       if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const out = (await mockRequest(path, { method: init?.method, body })) as T;
+      const out = await mockRequest(path, { method: init?.method, body });
       if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
       return out;
     } catch (e) {
@@ -60,11 +80,11 @@ async function request<T>(path: string, init?: { method?: string; body?: unknown
     throw new ApiError(msg ?? `Request failed (${res.status})`, res.status);
   }
   if (data === null) throw new ApiError("Unexpected empty response from server.", res.status);
-  return data as T;
+  return data;
 }
 
-const post = <T>(path: string, body: unknown, signal?: AbortSignal) =>
-  request<T>(path, { method: "POST", body, signal });
+const post = <T>(path: string, schema: ZodType<T>, body: unknown, signal?: AbortSignal) =>
+  request<T>(path, schema, { method: "POST", body, signal });
 
 export const api = {
   listCauses: (q: { city?: string; status?: string } = {}) => {
@@ -72,26 +92,26 @@ export const api = {
     if (q.city) sp.set("city", q.city);
     if (q.status) sp.set("status", q.status);
     const qs = sp.toString();
-    return request<Cause[]>(`/api/causes${qs ? `?${qs}` : ""}`);
+    return request<Cause[]>(`/api/causes${qs ? `?${qs}` : ""}`, CauseSchema.array());
   },
-  getCause: (slug: string) => request<Cause>(`/api/causes/${encodeURIComponent(slug)}`),
-  getProgress: (slug: string) => request<CauseProgressResponse>(`/api/causes/${encodeURIComponent(slug)}/progress`),
-  createCause: (input: CreateCauseRequest) => post<Cause>("/api/causes", input),
-  getMerchant: (id: string) => request<Merchant>(`/api/merchants/${encodeURIComponent(id)}`),
+  getCause: (slug: string) => request<Cause>(`/api/causes/${encodeURIComponent(slug)}`, CauseSchema),
+  getProgress: (slug: string) => request<CauseProgressResponse>(`/api/causes/${encodeURIComponent(slug)}/progress`, CauseProgressResponseSchema),
+  createCause: (input: CreateCauseRequest) => post<Cause>("/api/causes", CauseSchema, input),
+  getMerchant: (id: string) => request<Merchant>(`/api/merchants/${encodeURIComponent(id)}`, MerchantSchema),
   quote: (b: { merchantId: string; itemAmountCents: number; roundUp: boolean }, signal?: AbortSignal) =>
-    post<Quote>("/api/checkout/quote", b, signal),
+    post<Quote>("/api/checkout/quote", QuoteSchema, b, signal),
   intent: (b: { merchantId: string; itemAmountCents: number; roundUp: boolean }) =>
-    post<CheckoutIntentResponse>("/api/checkout/intent", b),
-  onboardCause: (causeId: string) => post<OnboardResponse>("/api/connect/cause/onboard", { causeId }),
+    post<CheckoutIntentResponse>("/api/checkout/intent", CheckoutIntentResponseSchema, b),
+  onboardCause: (causeId: string) => post<OnboardResponse>("/api/connect/cause/onboard", OnboardResponseSchema, { causeId }),
   causeStatus: (id: string) =>
-    request<ConnectStatusResponse>(`/api/connect/status?kind=cause&id=${encodeURIComponent(id)}`),
+    request<ConnectStatusResponse>(`/api/connect/status?kind=cause&id=${encodeURIComponent(id)}`, ConnectStatusResponseSchema),
 
   /**
    * CONTRACT GAP (ask P1): no endpoint fetches a cause by id, but Merchant only has activeCauseId.
    * Workaround isolated here: list and match. Replace once P1 adds lookup-by-id.
    */
   getCauseById: async (id: string): Promise<Cause | null> =>
-    (await request<Cause[]>("/api/causes")).find((c) => c.id === id) ?? null,
+    (await request<Cause[]>("/api/causes", CauseSchema.array())).find((c) => c.id === id) ?? null,
 };
 
 export function errorMessage(e: unknown): string {
