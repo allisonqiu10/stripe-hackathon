@@ -109,12 +109,15 @@ export const api = {
   causeStatus: (id: string) =>
     request<ConnectStatusResponse>(`/api/connect/status?kind=cause&id=${encodeURIComponent(id)}`, ConnectStatusResponseSchema),
 
-  /**
-   * CONTRACT GAP (ask P1): no endpoint fetches a cause by id, but Merchant only has activeCauseId.
-   * Workaround isolated here: list and match. Replace once P1 adds lookup-by-id.
-   */
-  getCauseById: async (id: string): Promise<Cause | null> =>
-    (await request<Cause[]>("/api/causes", CauseSchema.array())).find((c) => c.id === id) ?? null,
+  /** GET /api/causes/[slug] accepts either a slug or a cause id (merchants only store activeCauseId). */
+  getCauseById: async (id: string): Promise<Cause | null> => {
+    try {
+      return await request<Cause>(`/api/causes/${encodeURIComponent(id)}`, CauseSchema);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  },
 };
 
 export function errorMessage(e: unknown): string {

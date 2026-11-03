@@ -98,7 +98,7 @@ export async function mockRequest(path: string, init?: { method?: string; body?:
     return { raisedCents: st.raised, goalCents: cause.goalCents, donorCount: st.donors, recent: st.recent } satisfies Progress;
   }
   if ((m = /^\/api\/causes\/([^/]+)$/.exec(p))) {
-    const c = causes.find((x) => x.slug === m![1]);
+    const c = causes.find((x) => x.slug === m![1] || x.id === m![1]);
     if (!c) throw Object.assign(new Error("Cause not found"), { status: 404 });
     return c;
   }
