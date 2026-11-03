@@ -1,0 +1,90 @@
+// OWNER: P1
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "sqlite"
+  url = env("DATABASE_URL")
+}
+enum RuleType {
+  ROUND_UP
+  PERCENTAGE
+}
+enum CauseStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+enum OrderStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+enum DonationStatus {
+  PENDING
+  TRANSFERRED
+  REFUNDED
+  FAILED
+}
+model Merchant {
+  id String @id @default(cuid())
+  name String
+  email String
+  stripeAccountId String? @unique
+  onboardingComplete Boolean @default(false)
+  ruleType RuleType @default(ROUND_UP)
+  percentageBps Int @default(100)
+  activeCauseId String?
+  activeCause Cause? @relation(fields: [activeCauseId], references: [id])
+  orders Order[]
+  donations Donation[]
+}
+model Cause {
+  id String @id @default(cuid())
+  slug String @unique
+  title String
+  description String
+  city String
+  goalCents Int
+  ownerName String
+  stripeAccountId String? @unique
+  onboardingComplete Boolean @default(false)
+  status CauseStatus @default(DRAFT)
+  merchants Merchant[]
+  orders Order[]
+  donations Donation[]
+}
+model Order {
+  id String @id @default(cuid())
+  merchantId String
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+  causeId String?
+  cause Cause? @relation(fields: [causeId], references: [id])
+  paymentIntentId String @unique
+  itemAmountCents Int
+  donationCents Int
+  totalCents Int
+  ruleType RuleType
+  status OrderStatus @default(PENDING)
+  donations Donation[]
+}
+model Donation {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id])
+  causeId String
+  cause Cause @relation(fields: [causeId], references: [id])
+  merchantId String
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+  paymentIntentId String @unique
+  kind RuleType
+  amountCents Int
+  platformFeeCents Int
+  status DonationStatus @default(PENDING)
+  merchantTransferId String?
+  causeTransferId String?
+  createdAt DateTime @default(now())
+  @@index([causeId, status, createdAt])
+  @@index([merchantId, status])
+}
