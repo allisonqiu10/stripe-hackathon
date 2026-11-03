@@ -39,10 +39,12 @@ function InnerForm({ returnUrl, payLabel }: { returnUrl: string; payLabel: strin
 
 export default function PaymentForm({
   clientSecret,
+  publishableKey,
   returnUrl,
   payLabel,
 }: {
   clientSecret: string;
+  publishableKey: string | undefined;
   returnUrl: string;
   payLabel: string;
 }) {
@@ -53,9 +55,9 @@ export default function PaymentForm({
       </Button>
     );
   }
-  const stripe = getStripe();
+  const stripe = getStripe(publishableKey);
   if (!stripe) {
-    return <ErrorNotice message="Payments are not configured (missing NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)." />;
+    return <ErrorNotice message="Payments are not configured (missing STRIPE_PUBLISHABLE_KEY)." />;
   }
   return (
     <Elements key={clientSecret} stripe={stripe} options={{ clientSecret }}>

@@ -1,6 +1,6 @@
 // OWNER: P4
 import { describe, expect, it } from "vitest";
-import { outcomeFromStatus, verifyPayment } from "./stripe";
+import { getStripe, outcomeFromStatus, verifyPayment } from "./stripe";
 
 describe("outcomeFromStatus", () => {
   it("maps PaymentIntent statuses", () => {
@@ -13,6 +13,16 @@ describe("outcomeFromStatus", () => {
 
 describe("verifyPayment", () => {
   it("is unknown without a client secret", async () => {
-    expect(await verifyPayment(null)).toBe("unknown");
+    expect(await verifyPayment(null, "pk_test_x")).toBe("unknown");
+  });
+  it("is unknown without a publishable key", async () => {
+    expect(await verifyPayment("pi_secret_x", undefined)).toBe("unknown");
+  });
+});
+
+describe("getStripe", () => {
+  it("returns null when no key is configured", () => {
+    expect(getStripe(undefined)).toBeNull();
+    expect(getStripe("")).toBeNull();
   });
 });

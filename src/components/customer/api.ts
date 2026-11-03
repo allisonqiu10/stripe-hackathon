@@ -1,14 +1,15 @@
 // OWNER: P4
 // Thin typed client for the contract endpoints. NEXT_PUBLIC_P4_MOCKS=1 uses src/mocks/p4/server.
 import type {
+  CauseProgressResponse,
   Cause,
-  ConnectStatus,
-  CreateCauseInput,
-  IntentResponse,
+  CheckoutIntentResponse,
+  ConnectStatusResponse,
+  CreateCauseRequest,
   Merchant,
-  Progress,
+  OnboardResponse,
   Quote,
-} from "@/mocks/p4/contract";
+} from "@/lib/contract";
 
 export const USE_MOCKS = process.env.NEXT_PUBLIC_P4_MOCKS === "1";
 
@@ -74,16 +75,16 @@ export const api = {
     return request<Cause[]>(`/api/causes${qs ? `?${qs}` : ""}`);
   },
   getCause: (slug: string) => request<Cause>(`/api/causes/${encodeURIComponent(slug)}`),
-  getProgress: (slug: string) => request<Progress>(`/api/causes/${encodeURIComponent(slug)}/progress`),
-  createCause: (input: CreateCauseInput) => post<Cause>("/api/causes", input),
+  getProgress: (slug: string) => request<CauseProgressResponse>(`/api/causes/${encodeURIComponent(slug)}/progress`),
+  createCause: (input: CreateCauseRequest) => post<Cause>("/api/causes", input),
   getMerchant: (id: string) => request<Merchant>(`/api/merchants/${encodeURIComponent(id)}`),
   quote: (b: { merchantId: string; itemAmountCents: number; roundUp: boolean }, signal?: AbortSignal) =>
     post<Quote>("/api/checkout/quote", b, signal),
   intent: (b: { merchantId: string; itemAmountCents: number; roundUp: boolean }) =>
-    post<IntentResponse>("/api/checkout/intent", b),
-  onboardCause: (causeId: string) => post<{ url: string }>("/api/connect/cause/onboard", { causeId }),
+    post<CheckoutIntentResponse>("/api/checkout/intent", b),
+  onboardCause: (causeId: string) => post<OnboardResponse>("/api/connect/cause/onboard", { causeId }),
   causeStatus: (id: string) =>
-    request<ConnectStatus>(`/api/connect/status?kind=cause&id=${encodeURIComponent(id)}`),
+    request<ConnectStatusResponse>(`/api/connect/status?kind=cause&id=${encodeURIComponent(id)}`),
 
   /**
    * CONTRACT GAP (ask P1): no endpoint fetches a cause by id, but Merchant only has activeCauseId.

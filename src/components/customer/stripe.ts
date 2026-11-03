@@ -3,13 +3,17 @@ import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
 export type PaymentOutcome = "succeeded" | "processing" | "failed" | "unknown";
 
-let stripePromise: Promise<Stripe | null> | null = null;
+const cache = new Map<string, Promise<Stripe | null>>();
 
-/** Returns null when the publishable key is not configured. */
-export function getStripe(): Promise<Stripe | null> | null {
-  const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!key) return null;
-  return (stripePromise ??= loadStripe(key));
+/**
+ * The publishable key is passed down from a server page (STRIPE_PUBLISHABLE_KEY is not
+ * exposed to the browser). Returns null when it is not configured.
+ */
+export function getStripe(publishableKey: string | undefined): Promise<Stripe | null> | null {
+  if (!publishableKey) return null;
+  let p = cache.get(publishableKey);
+  if (!p) cache.set(publishableKey, (p = loadStripe(publishableKey)));
+  return p;
 }
 
 export function outcomeFromStatus(status: string): PaymentOutcome {
@@ -20,9 +24,9 @@ export function outcomeFromStatus(status: string): PaymentOutcome {
 }
 
 /** Verifies the real PaymentIntent status instead of trusting URL params. */
-export async function verifyPayment(clientSecret: string | null): Promise<PaymentOutcome> {
+export async function verifyPayment(clientSecret: string | null, publishableKey: string | undefined): Promise<PaymentOutcome> {
   if (!clientSecret) return "unknown";
-  const stripe = await getStripe();
+  const stripe = await getStripe(publishableKey);
   if (!stripe) return "unknown";
   const { paymentIntent, error } = await stripe.retrievePaymentIntent(clientSecret);
   if (error || !paymentIntent) return "unknown";

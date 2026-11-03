@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { api, errorMessage, isSafeRedirect } from "@/components/customer/api";
 import { formatCents, parseDollarsToCents } from "@/components/customer/format";
 import { Button, Card, ErrorNotice, Field, Page, inputClass } from "@/components/customer/ui";
-import type { Cause } from "@/mocks/p4/contract";
+import type { Cause } from "@/lib/contract";
 
 export default function NewCausePage() {
   const [created, setCreated] = useState<Cause | null>(null);

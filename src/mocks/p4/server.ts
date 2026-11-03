@@ -1,6 +1,6 @@
 // OWNER: P4
 // Fake backend for offline dev (NEXT_PUBLIC_P4_MOCKS=1). Mirrors the contract only.
-import type { Cause, ConnectStatus, IntentResponse, Merchant, Progress, Quote } from "./contract";
+import type { Cause, CauseProgressResponse as Progress, CheckoutIntentResponse as IntentResponse, ConnectStatusResponse as ConnectStatus, Merchant, Quote } from "@/lib/contract";
 
 const cause: Cause = {
   id: "cause_1",
@@ -26,6 +26,7 @@ const merchant = (id: string): Merchant => ({
   id,
   name: "Demo Café",
   email: "demo@example.com",
+  stripeAccountId: "acct_mock_m",
   onboardingComplete: true,
   ruleType: id.includes("pct") ? "PERCENTAGE" : "ROUND_UP",
   percentageBps: 100,
@@ -62,6 +63,7 @@ export async function mockRequest(path: string, init?: { method?: string; body?:
   if (p === "/api/causes" && method === "POST") {
     const c: Cause = {
       ...body,
+      stripeAccountId: null,
       id: `cause_${causes.length + 1}`,
       slug: String(body.title).toLowerCase().replace(/[^a-z0-9]+/g, "-"),
       onboardingComplete: false,
