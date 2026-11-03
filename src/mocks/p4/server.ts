@@ -15,12 +15,32 @@ const cause: Cause = {
   status: "ACTIVE",
 };
 const causes: Cause[] = [cause];
-let raised = 42000;
-let donors = 31;
-const recent: Progress["recent"] = [
-  { amountCents: 65, createdAt: new Date(Date.now() - 120000).toISOString() },
-  { amountCents: 100, createdAt: new Date(Date.now() - 3600000).toISOString() },
-];
+const SEED = {
+  raised: 42000,
+  donors: 31,
+  recent: [
+    { amountCents: 65, createdAt: new Date(Date.now() - 120000).toISOString() },
+    { amountCents: 100, createdAt: new Date(Date.now() - 3600000).toISOString() },
+  ] as Progress["recent"],
+};
+const STORE_KEY = "p4:mock-progress";
+
+// Persisted so progress survives the full-page redirect that a real Stripe payment also does.
+function loadState(): typeof SEED {
+  try {
+    const raw = sessionStorage.getItem(STORE_KEY);
+    return raw ? JSON.parse(raw) : { ...SEED, recent: [...SEED.recent] };
+  } catch {
+    return { ...SEED, recent: [...SEED.recent] };
+  }
+}
+function saveState(st: typeof SEED) {
+  try {
+    sessionStorage.setItem(STORE_KEY, JSON.stringify(st));
+  } catch {
+    /* ignore */
+  }
+}
 
 const merchant = (id: string): Merchant => ({
   id,
@@ -73,7 +93,10 @@ export async function mockRequest(path: string, init?: { method?: string; body?:
     return c;
   }
   if ((m = /^\/api\/causes\/([^/]+)\/progress$/.exec(p)))
-    return { raisedCents: raised, goalCents: cause.goalCents, donorCount: donors, recent } satisfies Progress;
+  {
+    const st = loadState();
+    return { raisedCents: st.raised, goalCents: cause.goalCents, donorCount: st.donors, recent: st.recent } satisfies Progress;
+  }
   if ((m = /^\/api\/causes\/([^/]+)$/.exec(p))) {
     const c = causes.find((x) => x.slug === m![1]);
     if (!c) throw Object.assign(new Error("Cause not found"), { status: 404 });
@@ -83,11 +106,13 @@ export async function mockRequest(path: string, init?: { method?: string; body?:
   if (p === "/api/checkout/quote") return quote(body);
   if (p === "/api/checkout/intent") {
     const q = quote(body);
-    raised += q.donationCents; // simulate the webhook landing
+    const st = loadState(); // simulate the webhook landing
+    st.raised += q.donationCents;
     if (q.donationCents) {
-      donors += 1;
-      recent.unshift({ amountCents: q.donationCents, createdAt: new Date().toISOString() });
+      st.donors += 1;
+      st.recent = [{ amountCents: q.donationCents, createdAt: new Date().toISOString() }, ...st.recent].slice(0, 10);
     }
+    saveState(st);
     return { clientSecret: "mock_secret", paymentIntentId: "pi_mock", quote: q } satisfies IntentResponse;
   }
   if (p === "/api/connect/cause/onboard") return { url: "/causes/riverside-community-garden/onboarding/complete" };
