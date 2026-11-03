@@ -24,7 +24,7 @@ export async function POST(_request: Request, _context: { params: Promise<Record
     if (quote.totalCents < 50 || quote.totalCents > 99999999) throw new CheckoutError('USD payment total must be between 50 and 99999999 cents');
     const split = computeSplit(quote, Number(process.env.PLATFORM_FEE_BPS ?? 0));
     // shortcut: Stripe retains creation keys for a limited time; reconcile orphan intents before retrying after 24 hours.
-    const intent = await stripe.paymentIntents.create({ amount: quote.totalCents, currency: 'usd', payment_method_types: ['card'],
+    const intent = await stripe.paymentIntents.create({ amount: quote.totalCents, currency: 'usd', allowed_payment_method_types: ['card'],
       transfer_group: orderId, metadata: { orderId, merchantId: quote.merchantId, causeId: quote.causeId, ruleType: quote.ruleType,
         donationCents: String(quote.donationCents), itemAmountCents: String(quote.itemAmountCents), fingerprint,
         quote: JSON.stringify(quote), merchantAccount, causeAccount, platformFeeCents: String(split.platformFeeCents) } },
