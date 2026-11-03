@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fundraisers Business Prototype</title>
+<link rel="stylesheet" href="./shared.css">
+<style>g.pinhl circle:nth-of-type(2){fill:#1a1b25}</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="./shared.js"></script>
+<script>
+const ui={f:{distance:5,cat:null,type:null},q:'',menu:null,featured:null,form:null,confirmEnd:false,acct:false};
+const app=document.getElementById('app');
+const route=()=>(location.hash.replace(/^#\/?/,'')||'discover').split('/');
+const pending=()=>DB.requests.filter(r=>r.biz===ME.id&&r.status==='Pending');
+
+function shell(inner,over=''){
+ return `<div class="shell"><div class="side">
+  <div style="position:relative"><button class="switcher" style="width:100%" data-act="acct" aria-expanded="${ui.acct}"><span class="mark" style="background:#7a4a1e">BC</span><span class="ell">${ME.name}</span>${I('chev',14)}</button>
+   ${ui.acct?`<div class="menu"><button class="on">Boneyard Coffee ${I('check',14,2)}</button><a href="./org.html" style="display:block;padding:8px;font-size:13px">Green Street Pantry (organization view)</a></div>`:''}</div>
+  ${[['home','Home'],['bal','Balances'],['tx','Transactions'],['cust','Customers'],['cat','Product catalog']].map(([i,t])=>`<button class="nav" data-act="stub">${I(i)}${t}</button>`).join('')}
+  <div class="group">Products</div>
+  ${[['conn','Connect'],['pay','Payments'],['bill','Billing'],['rep','Reporting'],['more','More']].map(([i,t])=>`<button class="nav" data-act="stub">${I(i)}${t}</button>`).join('')}
+  <div class="group">Apps</div><a class="nav on" href="#/discover">${I('heart')}Fundraisers</a>
+ </div><div class="main">
+  <div class="top"><label class="search">${I('search',14)}<input class="searchin" id="q" placeholder="Search fundraisers" aria-label="Search fundraisers" value="${esc(ui.q)}"></label><div class="r">${concept}${I('help',18)}${I('bell',18)}${I('gear',18)}<span class="avatar">AK</span></div></div>
+  ${inner}</div></div>${over}${demobar()}`;
+}
+const demobar=()=>`<div class="demobar"><span class="tag">Prototype · Today is ${short(DB.today)}</span><button class="pri" data-act="sim">Simulate a day of sales</button><span class="sp"></span><a href="./org.html">Open organization view</a><button data-act="reset">Reset demo</button></div>`;
+const head=(tab,act='')=>`<div class="apphead">${appIcon()}<h2>Fundraisers</h2><span class="gear">${I('gear',16)}</span><div class="act">${act}</div></div>
+ <div class="tabs" role="tablist">${[['discover','Discover'],['partnerships','Partnerships'],['requests','Requests',pending().length]].map(([r,n,c])=>`<a role="tab" aria-selected="${r===tab}" class="tab ${r===tab?'on':''}" href="#/${r}">${n}${c?`<span class="count">${c}</span>`:''}</a>`).join('')}</div>`;
+
+/* ───────── Discover ───────── */
+const OPTS={Distance:{k:'distance',vals:[[1,'1 mi'],[3,'3 mi'],[5,'5 mi']]},Category:{k:'cat',vals:CATS.map(c=>[c,c])},'Organization type':{k:'type',vals:TYPES.map(c=>[c,c])}};
+function chips(){
+ const X=`<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="${P.x}"/></svg>`;
+ const Pl=X.replace(P.x,P.plus);
+ const active=Object.values(OPTS).filter(o=>ui.f[o.k]!=null).length;
+ return Object.entries(OPTS).map(([label,o])=>{
+  const v=ui.f[o.k],shown=(o.vals.find(x=>x[0]===v)||[])[1];
+  const menu=ui.menu===label?`<div class="menu" role="menu">${o.vals.map(([val,t])=>`<button role="menuitem" class="${val===v?'on':''}" data-act="pick" data-k="${o.k}" data-v="${esc(val)}">${esc(t)}${val===v?I('check',14,2):''}</button>`).join('')}</div>`:'';
+  return `<span class="chipwrap">${v!=null?`<span class="chip on"><button data-act="menu" data-m="${label}" aria-haspopup="menu" style="font:inherit">${label} <b>${esc(shown)}</b></button><button data-act="clear" data-k="${o.k}" aria-label="Clear ${label} filter" style="display:flex">${X}</button></span>`:`<button class="chip" data-act="menu" data-m="${label}" aria-haspopup="menu">${Pl} ${label}</button>`}${menu}</span>`;
+ }).join('')+(active?`<button class="link" style="margin-left:8px" data-act="clearall">Clear filters</button>`:'');
+}
+function filtered(){
+ const q=ui.q.trim().toLowerCase();
+ return live().filter(f=>(ui.f.distance==null||f.d<=ui.f.distance)&&(!ui.f.cat||f.cat===ui.f.cat)&&(!ui.f.type||f.type===ui.f.type)&&(!q||[f.org,f.camp,f.blurb,f.cat].join(' ').toLowerCase().includes(q))).sort((a,b)=>a.d-b.d);
+}
+const badgeFor=f=>{const p=partnershipFor(f.id);return p?statusPill(p.status):''};
+function feature(f){
+ const p=partnershipFor(f.id);
+ return `<div class="feature"><div class="cover">${coverOf(f)}</div><div style="padding:24px;display:flex;flex-direction:column;gap:16px;min-width:0">
+  <div style="display:flex;align-items:center;gap:8px">${logo(f,40)}<div style="min-width:0;flex:1"><div class="ell" style="font-weight:600">${esc(f.org)}</div><div class="small sub">${f.d} mi from your shop</div></div>${badgeFor(f)}</div>
+  <div><div style="font-size:24px;line-height:32px;font-weight:700;letter-spacing:-.01em">${esc(f.camp)}</div><p class="blurb" style="margin-top:8px">${esc(f.blurb)}</p></div>
+  <div><div class="bar" style="height:8px;border-radius:4px"><i style="width:${pctOf(f)*100}%"></i></div><div class="num" style="margin-top:8px"><b style="font-weight:600">${m0(raised(f))}</b> <span class="sub">of ${m0(f.goal)} · ${leftDays(f)} days left</span></div></div>
+  <div style="margin-top:auto;display:flex;gap:8px">${p?`<a class="btn p lg" href="#/p/${p.id}">View your partnership</a>`:`<a class="btn p lg" href="#/f/${f.id}/support">Support this fundraiser</a>`}<a class="btn lg" href="#/f/${f.id}">View details</a></div>
+ </div></div>`;
+}
+function results(){
+ const list=filtered();
+ if(!list.length){
+  const all=live().filter(f=>(!ui.f.cat||f.cat===ui.f.cat)&&(!ui.f.type||f.type===ui.f.type)).sort((a,b)=>a.d-b.d);
+  return `<div class="empty" style="margin-top:8px"><div>${ui.q?`No fundraisers match “${esc(ui.q)}”.`:'No fundraisers match your filters.'}</div><div class="small sub">Try a wider distance or fewer filters.</div></div>
+   ${all[0]?`<div class="h3" style="margin-bottom:16px">Closest match</div><div class="grid3">${fundCard(all[0],{href:`#/f/${all[0].id}`,badge:badgeFor(all[0])})}</div>`:''}`;
+ }
+ const pick=list.find(f=>f.id===ui.featured)||list.find(f=>!partnershipFor(f.id))||list[0];
+ const rest=list.filter(f=>f!==pick);
+ const shelf=(t,fs)=>fs.length?`<div class="shelf"><h2 class="h3">${t}</h2></div><div class="grid3">${fs.map(f=>fundCard(f,{href:`#/f/${f.id}`,badge:badgeFor(f)})).join('')}</div>`:'';
+ return `<div class="topgrid">${feature(pick)}
+  <div class="panel mapcol" style="overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:baseline;padding:16px"><div class="h3">On your map</div><span class="small sub">Select a pin</span></div><div style="flex:1;min-height:0">${localMap(list,{w:304,h:296,mi:66,feat:pick.id,flabel:false})}</div></div></div>
+  ${shelf('A short walk from your shop',rest.filter(f=>f.d<=1))}${shelf('A quick bike ride away',rest.filter(f=>f.d>1&&f.d<=2.5))}${shelf('Worth the trip',rest.filter(f=>f.d>2.5))}`;
+}
+const discover=()=>shell(`${head('discover')}<div class="page"><h1 class="title">Causes around the corner</h1><div class="filters" id="chips">${chips()}</div><div id="results">${results()}</div></div>`);
+function refreshResults(){const c=document.getElementById('chips'),r=document.getElementById('results');if(c)c.innerHTML=chips();if(r)r.innerHTML=results()}
+
+/* ───────── Fundraiser details ───────── */
+function detailBody(f){
+ const p=partnershipFor(f.id),req=pending().find(r=>r.cause===f.id),est=estimate({dur:'range',start:'2026-01-01',end:'2026-01-14',rule:'PERCENTAGE',pct:3});
+ const others=OTHER_GIFTS[f.id]||[];
+ return `<div class="crumbs"><a href="#/discover"><b>Fundraisers</b></a>${I('chevr',12)}<a href="#/discover"><b>Discover</b></a>${I('chevr',12)}<span>${esc(f.camp)}</span></div>
+ <div class="wide" style="padding:8px 32px 0;display:flex;align-items:center;gap:16px">${logo(f,44)}
+  <div style="flex:1;min-width:0"><h1 class="title" style="font-size:24px;line-height:32px">${esc(f.camp)}</h1><div class="sub">${esc(f.org)} · ${esc(f.type)} · ${f.d} mi from your shop</div></div>
+  <a class="btn" href="#/public/${f.id}">View public page</a>${p?`<a class="btn p lg" href="#/p/${p.id}">View your partnership</a>`:`<a class="btn p lg" href="#/f/${f.id}/support">Support this fundraiser</a>`}</div>
+ <div class="page" style="padding-top:16px"><div class="cols"><div>
+  <div class="cover" style="aspect-ratio:auto;height:216px;border-radius:8px;margin-bottom:24px">${coverOf(f)}</div>
+  <div class="section"><div style="display:flex;align-items:baseline;justify-content:space-between"><div><span class="stat num">${m0(raised(f))}</span> <span class="sub">raised of ${m0(f.goal)} goal</span></div><span class="sub num">${pctS(pctOf(f))} · ${leftDays(f)} days left</span></div><div class="bar" style="height:8px;border-radius:4px;margin-top:8px"><i style="width:${pctOf(f)*100}%"></i></div></div>
+  <div class="section"><h2 class="h3">Mission</h2><p style="margin:8px 0 0;max-width:640px">${esc(f.blurb)}</p></div>
+  ${f.about?`<div class="section"><h2 class="h3">About this campaign</h2><p style="margin:8px 0 0;max-width:640px">${esc(f.about)}</p></div>`:''}
+  ${(f.impact||[]).length?`<div class="section"><h2 class="h3">Community impact</h2><table style="margin-top:8px"><tbody>${f.impact.map(([a,t])=>`<tr><td class="num" style="width:90px;font-weight:600">${m2(a)}</td><td style="padding-left:12px">${esc(t)}</td></tr>`).join('')}</tbody></table></div>`:''}
+  ${others.length?`<div class="section"><div style="display:flex;justify-content:space-between"><h2 class="h3">Local businesses already helping</h2><span class="sub">${others.length} partners</span></div><table style="margin-top:8px"><thead><tr><th>Business</th><th>Support</th><th class="num">Distance</th><th class="num">Contributed</th></tr></thead><tbody>${others.map(r=>`<tr><td style="font-weight:500">${esc(r.b)}</td><td class="sub">${esc(r.sup)}</td><td class="num sub">${r.d} mi</td><td class="num">${m2(r.amt)}</td></tr>`).join('')}</tbody></table></div>`:''}
+ </div><div>
+  ${req?`<div class="panel" style="padding:16px;margin-bottom:16px;background:var(--raised)"><b style="font-weight:600">They asked you directly</b><p class="sub" style="margin:4px 0 8px">${esc(req.msg)}</p><a class="link" href="#/requests">Review request</a></div>`:''}
+  <div class="panel" style="overflow:hidden;margin-bottom:16px"><div style="height:170px">${localMap([f],{w:344,h:170,mi:120,feat:f.id,labels:false})}</div><div style="padding:16px"><b style="font-weight:600">${esc(f.org)}</b><div class="sub">${f.d} mi from ${ME.name}</div></div></div>
+  <div class="panel" style="padding:16px;margin-bottom:16px"><h2 class="h3">What you could add</h2><div class="stat num" style="font-size:24px;line-height:32px;margin-top:8px">${m0(est.amount)}</div><div class="sub">At 3% of sales for ${est.days} days, based on your usual ${m0(ME.daily)} a day.${f.unit?` That covers about ${Math.floor(est.amount/f.unit[0])} ${esc(f.unit[1])}.`:''}</div></div>
+  <h2 class="h3">Organization</h2><dl class="plist"><dt>Type</dt><dd>${esc(f.type)}</dd><dt>Status</dt><dd><span class="pill pos">Verified</span></dd>${f.founded?`<dt>Founded</dt><dd>${f.founded}</dd>`:''}<dt>Organizer</dt><dd>${esc(f.organizer||'Priya Raman, president')}</dd></dl>
+ </div></div></div>`;
+}
+
+/* ───────── Create partnership ───────── */
+function newForm(id,req){
+ const start=addDays(DB.today,1);
+ ui.form={cause:id,dur:req?req.dur:'range',start:req&&req.date||start,end:req&&req.dur!=='one'&&req.end||addDays(start,13),rule:req?req.rule:'PERCENTAGE',pct:req?req.pct:3,custom:req?![1,2,3,5,10].includes(req.pct):false,eligible:'All in-store sales',prompt:'Terminal and online',cap:'',req:req?req.id:null,busy:false};
+}
+const radio=(name,val,cur,title,desc='')=>`<label class="opt ${val===cur?'on':''}"><input type="radio" name="${name}" value="${val}" ${val===cur?'checked':''} data-fld="${name}"><b>${title}</b>${desc?`<span>${desc}</span>`:''}</label>`;
+function formError(){
+ const x=ui.form;
+ if(x.start<=DB.today)return{k:'start',m:'Choose a start date after today.'};
+ if(x.dur==='range'&&x.end<x.start)return{k:'end',m:'The end date must be after the start date.'};
+ if(x.dur==='range'&&x.end>F(x.cause).ends)return{k:'end',m:`This fundraiser ends ${short(F(x.cause).ends)}.`};
+ if(x.dur==='one'&&x.start>F(x.cause).ends)return{k:'start',m:`This fundraiser ends ${short(F(x.cause).ends)}.`};
+ if(x.rule==='PERCENTAGE'&&!(+x.pct>0&&+x.pct<=100))return{k:'pct',m:'Enter a percentage between 0.1 and 100.'};
+ if(x.cap!==''&&!(+x.cap>0))return{k:'cap',m:'Enter a maximum above $0, or leave it blank.'};
+ return null;
+}
+function estHTML(){
+ const x=ui.form,f=F(x.cause),e=estimate(x);
+ const err=formError();
+ const per=x.dur==='ongoing'?' a month':'';
+ const units=f.unit&&e.amount>=f.unit[0]?`<span class="sub">Covers about</span><span style="text-align:right">${Math.floor(e.amount/f.unit[0])} ${esc(f.unit[1])}</span>`:'';
+ return (x.rule==='ROUND_UP'
+  ?`<span class="sub">Estimated customer donations</span><b style="font-weight:600;text-align:right;font-size:16px">${m2(e.amount)}${per}</b>
+    <span class="sub">${ME.txDaily} payments a day × ${pctS(ME.optIn)} opt-in × $${ME.avgRound.toFixed(2)} × ${e.days} ${e.days===1?'day':'days'}${e.capped?', capped':''}</span><span></span>${units}
+    <span class="sub">Taken from your sales</span><span style="text-align:right">$0.00</span>`
+  :`<span class="sub">Estimated donation</span><b style="font-weight:600;text-align:right;font-size:16px">${m2(e.amount)}${per}</b>
+    <span class="sub">${+x.pct||0}% × ${m0(ME.daily)} usual daily sales × ${e.days} ${e.days===1?'day':'days'}${e.capped?', capped':''}</span><span></span>${units}
+    <span class="sub">Comes out of</span><span style="text-align:right">Your share of each sale</span>`)+(err?`<span class="err" style="grid-column:1/-1">${esc(err.m)}</span>`:'');
+}
+function supportDrawer(){
+ const x=ui.form,f=F(x.cause),t=min=>min;
+ const min=addDays(DB.today,1);
+ return `<div class="scrim" data-act="closedrawer"></div><div class="focus" role="dialog" aria-modal="true" aria-label="Support ${esc(f.camp)}"><header><a class="x" href="#/f/${f.id}" aria-label="Close">${I('x',18)}</a><div class="h3" style="font-size:18px">Support ${esc(f.camp)}</div><div class="sub">${esc(f.org)} · ${f.d} mi away</div></header>
+ <div class="body" id="dbody">
+  <div><span class="fl">How long?</span><div class="opts c3">${radio('dur','one',x.dur,'One day','A single sales day or event')}${radio('dur','range',x.dur,'Date range','A set stretch of days')}${radio('dur','ongoing',x.dur,'Ongoing','Until you stop it')}</div>
+   <div class="fields ${x.dur==='range'?'c2':''}" style="margin-top:8px">
+    <div><label class="fl small sub" style="font-weight:400;margin-bottom:4px">${x.dur==='one'?'Date':'Start date'}</label><div class="input"><input type="date" min="${min}" value="${x.start}" data-in="start"></div></div>
+    ${x.dur==='range'?`<div><label class="fl small sub" style="font-weight:400;margin-bottom:4px">End date</label><div class="input"><input type="date" min="${min}" value="${x.end}" data-in="end"></div></div>`:''}</div></div>
+  <div><span class="fl">Where does the donation come from?</span><div class="opts c2">${radio('rule','PERCENTAGE',x.rule,'Percentage of sales','You give a share of eligible sales')}${radio('rule','ROUND_UP',x.rule,'Customer round-up','Customers choose to round up at checkout')}</div></div>
+  ${x.rule==='PERCENTAGE'?`<div><span class="fl">Percentage of eligible sales</span><div class="chips" style="gap:16px;flex-wrap:wrap">${[1,2,3,5,10].map(p=>`<label class="opt ${!x.custom&&+x.pct===p?'on':''}"><input type="radio" name="pct" value="${p}" ${!x.custom&&+x.pct===p?'checked':''} data-fld="pct"><b>${p}%</b></label>`).join('')}<label class="opt ${x.custom?'on':''}"><input type="radio" name="pct" value="custom" ${x.custom?'checked':''} data-fld="pct"><b>Custom</b></label>${x.custom?`<div class="input" style="height:28px;width:88px"><input type="number" min="0.1" max="100" step="0.1" value="${esc(x.pct)}" data-in="pct" aria-label="Custom percentage"><span class="sub">%</span></div>`:''}</div></div>
+   <div class="fields c2"><div><label class="fl small sub" style="font-weight:400;margin-bottom:4px">Eligible sales</label><div class="input"><select data-in="eligible">${['All in-store sales','All sales','Online sales only'].map(o=>`<option ${o===x.eligible?'selected':''}>${o}</option>`).join('')}</select></div></div>
+   <div><label class="fl small sub" style="font-weight:400;margin-bottom:4px">Stop at a maximum (optional)</label><div class="input num"><span class="sub">$</span><input type="number" min="1" placeholder="No maximum" value="${esc(x.cap)}" data-in="cap"></div></div></div>`
+  :`<div><span class="fl">What customers see at checkout</span><div class="receipt num"><div class="line"><span>Oat milk latte</span><span>$4.75</span></div><div class="ru"><span class="check">${I('check',11,3)}</span><span style="flex:1">Round up to $5.00 for ${esc(f.org)}</span><b style="font-weight:600">+$${(roundUpCents(475)/100).toFixed(2)}</b></div><div class="line" style="font-weight:600"><span>Total</span><span>$5.00</span></div></div></div>
+   <div class="fields c2"><div><label class="fl small sub" style="font-weight:400;margin-bottom:4px">Show the prompt on</label><div class="input"><select data-in="prompt">${['Terminal and online','Terminal only','Online only'].map(o=>`<option ${o===x.prompt?'selected':''}>${o}</option>`).join('')}</select></div></div>
+   <div><label class="fl small sub" style="font-weight:400;margin-bottom:4px">Stop at a maximum (optional)</label><div class="input num"><span class="sub">$</span><input type="number" min="1" placeholder="No maximum" value="${esc(x.cap)}" data-in="cap"></div></div></div>`}
+  <div class="est num" id="est">${estHTML()}</div>
+ </div>
+ <footer><span class="l">You can pause or end this at any time.</span><a class="btn" href="#/f/${f.id}">Cancel</a><button class="btn p" id="activate" data-act="activate" ${x.busy?'disabled':''}>${x.busy?'<span class="spin"></span> Activating':'Activate partnership'}</button></footer></div>`;
+}
+function confirmDrawer(p){
+ const f=F(p.cause),e=estimate(p);
+ return `<div class="scrim"></div><div class="focus" role="dialog" aria-modal="true" aria-label="Partnership confirmed"><header><a class="x" href="#/partnerships" aria-label="Close">${I('x',18)}</a><div class="success">${I('check',20,2.4)}</div><div class="h3" style="font-size:18px;margin-top:8px">Your partnership is scheduled</div><div class="sub">${esc(f.org)} has been notified. Giving starts ${short(p.start)}.</div></header>
+ <div class="body"><dl class="plist" style="grid-template-columns:150px 1fr;margin:0"><dt>Fundraiser</dt><dd>${esc(f.camp)}</dd><dt>Support</dt><dd>${supLabel(p)}</dd><dt>Dates</dt><dd>${durLabel(p)}</dd><dt>Maximum</dt><dd class="num">${p.cap?m2(+p.cap):'None'}</dd><dt>Estimated donation</dt><dd class="num">${m2(e.amount)}${p.dur==='ongoing'?' a month':''}</dd></dl>
+  <div class="panel" style="padding:16px"><div class="h3">Tell your customers</div><div class="sub" style="margin:4px 0 8px">Add a line to receipts so customers know where their purchase is helping.</div><div class="receipt">${p.rule==='ROUND_UP'?'Round up today':`${p.pct}% of today's sale`} to support ${esc(f.org)}, ${f.d} mi from this shop.</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span>Show on receipts</span><button class="switch ${p.receipt?'':'off'}" role="switch" aria-checked="${!!p.receipt}" aria-label="Show on receipts" data-act="receipt" data-id="${p.id}"></button></div></div></div>
+ <footer><a class="btn" href="#/discover">Find another fundraiser</a><a class="btn p" href="#/partnerships">View partnership</a></footer></div>`;
+}
+
+/* ───────── Partnerships ───────── */
+function partnerships(over=''){
+ const ps=DB.partnerships,all=ps.reduce((a,p)=>a+p.donated,0),acc=DB.weeks[DB.weeks.length-1].total;
+ const act=ps.filter(p=>p.status==='Active'),lead=[...act].sort((a,b)=>b.donated-a.donated)[0];
+ const lf=lead&&F(lead.cause);
+ const impact=ps.filter(p=>p.donated>0&&F(p.cause)&&F(p.cause).unit).map(p=>({f:F(p.cause),n:Math.floor(p.donated/F(p.cause).unit[0])}));
+ const order={Active:0,Paused:1,Scheduled:2,Completed:3,Ended:4};
+ return shell(`${head('partnerships','<a class="btn p" href="#/discover">Find a fundraiser</a>')}<div class="page">
+  <div style="margin-bottom:16px"><h1 class="title">Your local giving</h1><div class="sub">${lf?`${esc(lf.org)} is ${m0(leftOf(lf))} from its goal. You've given ${m2(lead.donated)} of its ${m0(raised(lf))} so far.`:'Nothing is active right now. Your next partnership appears here.'}</div></div>
+  <div class="kpis num"><div><div class="sub">Donated since Sep 1</div><div class="kv lead">${m2(all)}</div></div><div><div class="sub">This week so far</div><div class="kv">${m2(acc)}</div></div><div><div class="sub">Active partnerships</div><div class="kv">${act.length}</div></div><div><div class="sub">Scheduled</div><div class="kv">${ps.filter(p=>p.status==='Scheduled').length}</div></div></div>
+  <div class="cols"><div>
+   <div class="section" style="padding-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><h2 class="h3">Donations by week</h2><div class="legend"><span><i style="background:#635bff"></i>Earlier weeks</span><span><i style="background:#c4c1ff"></i>This week so far</span></div></div>${bars()}</div>
+   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2 class="h3">Partnerships</h2><span class="sub">${ps.length} total</span></div>
+   <table><thead><tr><th>Organization</th><th>Support</th><th>Status</th><th class="num">Donated</th></tr></thead><tbody>
+   ${[...ps].sort((a,b)=>order[a.status]-order[b.status]).map(p=>{const f=F(p.cause);return `<tr class="rowlink" data-act="open" data-href="#/p/${p.id}" tabindex="0"><td><div class="orgline">${logo(f,32)}<div style="min-width:0"><div style="font-weight:500" class="ell">${esc(f.org)}</div><small>${esc(f.camp)}</small></div></div></td><td>${supLabel(p)}<small>${durLabel(p)}</small></td><td>${statusPill(p.status)}</td><td class="num">${m2(p.donated)}</td></tr>`}).join('')}
+   </tbody></table></div><div>
+   <h2 class="h3" style="margin-bottom:2px">Organization impact</h2><div class="sub small" style="margin-bottom:8px">What your donations have paid for, at each organization's stated cost.</div>
+   ${impact.map(i=>`<div class="imp"><div><div class="num" style="font-weight:600">${i.n} ${esc(i.f.unit[1])}</div><div class="small sub">${esc(i.f.org)}</div></div><span class="sub small num" style="white-space:nowrap">${m2(i.f.unit[0])} each</span></div>`).join('')}
+   <h2 class="h3" style="margin:24px 0 4px">Campaign performance</h2><div class="legend" style="margin-bottom:8px"><span><i style="background:var(--accent-ink)"></i>Your share</span><span><i style="background:var(--accent-mid)"></i>Others</span></div>
+   ${ps.filter(p=>p.status!=='Ended').map(p=>{const f=F(p.cause);return `<div style="margin-bottom:16px"><div class="money"><span style="font-weight:500" class="ell">${esc(f.camp)}</span><span class="sub small num" style="white-space:nowrap">${pctS(pctOf(f))} of ${m0(f.goal)}</span></div><div class="bar" style="margin-top:4px"><i class="you" style="width:${Math.min(100,p.donated/f.goal*100)}%"></i><i class="oth" style="width:${Math.min(100,f.others/f.goal*100)}%;margin-left:2px"></i></div></div>`}).join('')}
+   <div class="imp" style="border-top:1px solid var(--rule)"><span class="sub">Round-up opt-in</span><span class="num">${pctS(ME.optIn)} of payments</span></div>
+  </div></div></div>`,over);
+}
+function partnershipDrawer(p){
+ const f=F(p.cause),ended=['Ended','Completed'].includes(p.status);
+ return `<div class="scrim" data-act="closedrawer"></div><div class="focus" role="dialog" aria-modal="true" aria-label="Partnership with ${esc(f.org)}"><header><a class="x" href="#/partnerships" aria-label="Close">${I('x',18)}</a><div style="display:flex;gap:8px;align-items:center">${logo(f,40)}<div style="flex:1;min-width:0"><div class="h3" style="font-size:18px">${esc(f.org)}</div><div class="sub">${esc(f.camp)}</div></div></div></header>
+ <div class="body"><div><span class="stat num">${m2(p.donated)}</span> <span class="sub">donated so far</span></div>
+  <dl class="plist" style="grid-template-columns:150px 1fr;margin:0"><dt>Status</dt><dd>${statusPill(p.status)}</dd><dt>Support</dt><dd>${supLabel(p)}</dd><dt>Dates</dt><dd>${durLabel(p)}</dd><dt>${p.rule==='ROUND_UP'?'Prompt shown on':'Eligible sales'}</dt><dd>${esc(p.eligible)}</dd><dt>Maximum</dt><dd class="num">${p.cap?m2(+p.cap):'None'}</dd><dt>Fundraiser goal</dt><dd class="num">${m0(raised(f))} of ${m0(f.goal)}</dd></dl>
+  <div class="swrow"><div><b style="font-weight:500">Show on receipts</b><div class="small sub">Tells customers where their purchase is helping.</div></div><button class="switch ${p.receipt?'':'off'}" role="switch" aria-checked="${!!p.receipt}" aria-label="Show on receipts" data-act="receipt" data-id="${p.id}"></button></div>
+  ${ui.confirmEnd?`<div class="panel" style="padding:16px"><b style="font-weight:600">End this partnership with ${esc(f.org)}?</b><p class="sub" style="margin:4px 0 8px">Giving stops today. The ${m2(p.donated)} already donated stays with the organization.</p><div style="display:flex;gap:8px"><button class="btn" data-act="noend">Keep it</button><button class="btn danger" data-act="end" data-id="${p.id}">End partnership</button></div></div>`:''}
+ </div>
+ <footer><a class="btn" href="#/f/${f.id}" style="margin-right:auto">View fundraiser</a>${ended?'':`${ui.confirmEnd?'':`<button class="btn danger" data-act="askend">End partnership</button>`}<button class="btn p" data-act="pause" data-id="${p.id}">${p.status==='Paused'?'Resume':'Pause'}</button>`}</footer></div>`;
+}
+
+/* ───────── Requests ───────── */
+function requests(){
+ const rs=DB.requests.filter(r=>r.biz===ME.id).sort((a,b)=>(a.status==='Pending'?0:1)-(b.status==='Pending'?0:1));
+ return shell(`${head('requests')}<div class="page"><h1 class="title" style="margin-bottom:16px">Requests from local organizations</h1>
+  ${rs.length?`<div class="cardlist">${rs.map(r=>{const f=F(r.cause);return `<div class="reqcard">${logo(f,44)}<div style="min-width:0"><div style="display:flex;gap:8px;align-items:center"><b style="font-weight:600">${esc(f.org)}</b>${statusPill(r.status)}</div><div class="small sub">${esc(f.camp)} · ${f.d} mi away · ${esc(r.when)}</div><p style="margin:8px 0;max-width:640px">${esc(r.msg)}</p><div class="sub small">Asking for ${r.rule==='ROUND_UP'?'customer round-ups':r.pct+'% of sales'}, ${r.dur==='one'?'one day on '+short(r.date):r.dur==='range'?'from '+short(r.date):'ongoing'}</div></div>
+   <div style="display:flex;gap:8px">${r.status==='Pending'?`<button class="btn" data-act="decline" data-id="${r.id}">Decline</button><button class="btn p" data-act="accept" data-id="${r.id}">Review and accept</button>`:`<a class="btn" href="#/f/${f.id}">View fundraiser</a>`}</div></div>`}).join('')}</div>`
+  :`<div class="empty"><div>No requests yet.</div><div class="small sub">Requests from local organizations appear here.</div></div>`}</div>`);
+}
+
+/* ───────── Router ───────── */
+function render(){
+ const [a,b,c]=route();ui.menu=null;
+ if(a==='public'){const f=F(b);app.innerHTML=f?publicPage(f,'#/discover'):'';scrollTo(0,0);return}
+ if(a==='f'){const f=F(b);if(!f){location.hash='#/discover';return}
+  if(c==='support'){if(partnershipFor(b)){location.hash='#/p/'+partnershipFor(b).id;return}if(!ui.form||ui.form.cause!==b)newForm(b);app.innerHTML=shell(detailBody(f),supportDrawer())}
+  else{ui.form=null;app.innerHTML=shell(detailBody(f))}
+ }else if(a==='confirmed'){const p=DB.partnerships.find(x=>x.id===b);if(!p){location.hash='#/partnerships';return}app.innerHTML=shell(detailBody(F(p.cause)),confirmDrawer(p))}
+ else if(a==='p'){const p=DB.partnerships.find(x=>x.id===b);if(!p){location.hash='#/partnerships';return}app.innerHTML=partnerships(partnershipDrawer(p))}
+ else if(a==='partnerships'){ui.confirmEnd=false;app.innerHTML=partnerships()}
+ else if(a==='requests')app.innerHTML=requests();
+ else app.innerHTML=discover();
+}
+addEventListener('hashchange',()=>{render();if(!document.querySelector('.focus'))scrollTo(0,0)});
+addEventListener('storage',e=>{if(e.key!==KEY)return;loadDB();if(!ui.form||route()[2]!=='support')render()});
+
+function rerenderDrawer(){const top=document.getElementById('dbody')?.scrollTop||0;app.innerHTML=shell(detailBody(F(ui.form.cause)),supportDrawer());const b=document.getElementById('dbody');if(b)b.scrollTop=top}
+
+document.addEventListener('click',e=>{
+ const t=e.target.closest('[data-act]');
+ if(!e.target.closest('.chipwrap')&&ui.menu){ui.menu=null;const c=document.getElementById('chips');if(c)c.innerHTML=chips()}
+ if(!e.target.closest('.switcher,.menu')&&ui.acct){ui.acct=false;render()}
+ if(!t)return;
+ const act=t.dataset.act,id=t.dataset.id;
+ if(act==='stub')toast('This Dashboard page is outside the prototype');
+ if(act==='acct'){ui.acct=!ui.acct;render()}
+ if(act==='menu'){ui.menu=ui.menu===t.dataset.m?null:t.dataset.m;document.getElementById('chips').innerHTML=chips()}
+ if(act==='pick'){const k=t.dataset.k;ui.f[k]=k==='distance'?+t.dataset.v:t.dataset.v;ui.menu=null;ui.featured=null;refreshResults()}
+ if(act==='clear'){ui.f[t.dataset.k]=null;ui.featured=null;refreshResults()}
+ if(act==='clearall'){ui.f={distance:null,cat:null,type:null};ui.q='';const q=document.getElementById('q');if(q)q.value='';ui.featured=null;refreshResults()}
+ if(act==='pin'){ui.featured=id;refreshResults()}
+ if(act==='open')location.hash=t.dataset.href;
+ if(act==='closedrawer'){const r=route();location.hash=r[0]==='p'?'#/partnerships':'#/f/'+r[1]}
+ if(act==='sim'){const r=simulateDay();toast(r.total?`${short(r.today)}: ${m2(r.total)} donated across ${r.n} ${r.n===1?'partnership':'partnerships'}`:`${short(r.today)}: nothing to donate today`);render()}
+ if(act==='reset'){resetDB();ui.form=null;ui.f={distance:5,cat:null,type:null};ui.q='';toast('Demo reset');location.hash='#/discover';render()}
+ if(act==='activate'){
+  const err=formError();if(err){document.getElementById('est').innerHTML=estHTML();return}
+  ui.form.busy=true;rerenderDrawer();
+  setTimeout(()=>{const x=ui.form,pid='p_'+x.cause+'_'+Date.now();
+   DB.partnerships.push({id:pid,cause:x.cause,rule:x.rule,pct:x.rule==='ROUND_UP'?0:+x.pct,dur:x.dur,start:x.start,end:x.dur==='one'?x.start:x.dur==='range'?x.end:null,cap:x.cap?+x.cap:null,eligible:x.rule==='ROUND_UP'?x.prompt:x.eligible,status:'Scheduled',donated:0,receipt:true});
+   if(x.req){const r=DB.requests.find(q=>q.id===x.req);if(r){r.status='Accepted';r.when='Accepted '+short(DB.today)}}
+   saveDB();ui.form=null;location.hash='#/confirmed/'+pid},700);
+ }
+ if(act==='receipt'){const p=DB.partnerships.find(x=>x.id===id);p.receipt=!p.receipt;saveDB();t.classList.toggle('off',!p.receipt);t.setAttribute('aria-checked',p.receipt)}
+ if(act==='pause'){const p=DB.partnerships.find(x=>x.id===id);p.status=p.status==='Paused'?(p.start>DB.today?'Scheduled':'Active'):'Paused';saveDB();toast(p.status==='Paused'?'Partnership paused':'Partnership resumed');render()}
+ if(act==='askend'){ui.confirmEnd=true;render()}
+ if(act==='noend'){ui.confirmEnd=false;render()}
+ if(act==='end'){const p=DB.partnerships.find(x=>x.id===id);p.status='Ended';p.end=DB.today;saveDB();ui.confirmEnd=false;toast('Partnership ended');location.hash='#/partnerships'}
+ if(act==='accept'){const r=DB.requests.find(q=>q.id===id);newForm(r.cause,r);location.hash='#/f/'+r.cause+'/support'}
+ if(act==='decline'){const r=DB.requests.find(q=>q.id===id);r.status='Declined';r.when='Declined '+short(DB.today);saveDB();toast('Request declined');render()}
+});
+document.addEventListener('change',e=>{
+ const fld=e.target.dataset.fld;if(!fld||!ui.form)return;
+ if(fld==='pct'){if(e.target.value==='custom'){ui.form.custom=true}else{ui.form.custom=false;ui.form.pct=+e.target.value}}
+ else ui.form[fld]=e.target.value;
+ rerenderDrawer();
+});
+document.addEventListener('input',e=>{
+ if(e.target.id==='q'){ui.q=e.target.value;if(route()[0]!=='discover'&&location.hash!==''){location.hash='#/discover'}refreshResults();return}
+ const k=e.target.dataset.in;if(!k||!ui.form)return;
+ ui.form[k]=e.target.value;document.getElementById('est').innerHTML=estHTML();
+});
+document.addEventListener('mouseover',e=>{const c=e.target.closest('[data-card]');document.querySelectorAll('g.pinhl').forEach(g=>g.classList.remove('pinhl'));if(c){const g=document.querySelector(`g[data-id="${c.dataset.card}"]`);if(g)g.classList.add('pinhl')}});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'){if(ui.menu){ui.menu=null;document.getElementById('chips').innerHTML=chips()}else if(document.querySelector('.focus .x'))document.querySelector('.focus .x').click()}
+ if(e.key==='Enter'&&e.target.matches('[data-act="pin"],tr[data-act]'))e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+});
+render();
+</script>
+</body>
+</html>
