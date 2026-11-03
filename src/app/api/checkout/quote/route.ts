@@ -1,2 +1,6 @@
 // OWNER: P2
-export async function POST(_request: Request, _context: { params: Promise<Record<string, string>> }) { return Response.json({ error: "NotImplemented" }, { status: 501 }); }
+import { readRequest, prepareCheckout, checkoutError } from '../../../../lib/donation/checkout';
+export async function POST(_request: Request, _context: { params: Promise<Record<string, string>> }) {
+  try { return Response.json((await prepareCheckout(await readRequest(_request))).quote); }
+  catch (error) { return checkoutError(error); }
+}
